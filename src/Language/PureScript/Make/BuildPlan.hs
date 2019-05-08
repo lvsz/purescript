@@ -24,6 +24,7 @@ import           Language.PureScript.Crash
 import           Language.PureScript.Errors
 import           Language.PureScript.Externs
 import           Language.PureScript.Make.Actions as Actions
+import           Language.PureScript.Make.Monad
 import           Language.PureScript.Names (ModuleName)
 import qualified Paths_purescript as Paths
 
@@ -103,10 +104,10 @@ getResult buildPlan moduleName =
 -- The given MakeActions are used to collect various timestamps in order to
 -- determine whether a module needs rebuilding.
 construct
-  :: forall m. (Monad m, MonadBaseControl IO m)
-  => MakeActions m
+  :: forall make. (MonadMake make, MonadBaseControl IO make) -- (Monad m, MonadBaseControl IO m)
+  => MakeActions make
   -> ([Module], [(ModuleName, [ModuleName])])
-  -> m BuildPlan
+  -> make BuildPlan
 construct MakeActions{..} (sorted, graph) = do
   prebuilt <- foldM findExistingExtern M.empty sorted
   let toBeRebuilt = filter (not . flip M.member prebuilt . getModuleName) sorted
@@ -117,7 +118,7 @@ construct MakeActions{..} (sorted, graph) = do
       buildJob <- BuildJob <$> C.newEmptyMVar <*> C.newEmptyMVar
       pure (M.insert moduleName buildJob prev)
 
-    findExistingExtern :: M.Map ModuleName Prebuilt -> Module -> m (M.Map ModuleName Prebuilt)
+    findExistingExtern :: MonadMake make => M.Map ModuleName Prebuilt -> Module -> make (M.Map ModuleName Prebuilt)
     findExistingExtern prev (getModuleName -> moduleName) = do
       outputTimestamp <- getOutputTimestamp moduleName
       let deps = fromMaybe (internalError "make: module not found in dependency graph.") (lookup moduleName graph)

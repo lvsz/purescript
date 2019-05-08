@@ -1,5 +1,6 @@
 {-# LANGUAGE PackageImports        #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications       #-}
 
 module Language.PureScript.Ide.Rebuild
   ( rebuildFileSync
@@ -68,12 +69,12 @@ rebuildFile file actualFile codegenTargets runOpenBuild = do
   foreigns <- P.inferForeignModules (M.singleton (P.getModuleName m) (Right file))
 
   let makeEnv = MakeActionsEnv outputDirectory filePathMap foreigns False
+      makeAct :: forall make. P.MonadMake make => P.MakeActions make
+      makeAct = shushProgress (buildMakeActions makeEnv) makeEnv
   -- Rebuild the single module using the cached externs
   (result, warnings) <- logPerf (labelTimespec "Rebuilding Module") $
-    liftIO
-    . P.runMake (P.defaultOptions { P.optionsCodegenTargets = codegenTargets })
-    . P.rebuildModule (buildMakeActions
-                        >>= shushProgress $ makeEnv) externs $ m
+    liftIO (P.runMake (P.defaultOptions { P.optionsCodegenTargets = codegenTargets })
+            (P.rebuildModule makeAct externs m))
   case result of
     Left errors -> throwError (RebuildError errors)
     Right newExterns -> do
@@ -119,12 +120,10 @@ rebuildModuleOpen
   -> P.Module
   -> m ()
 rebuildModuleOpen makeEnv externs m = void $ runExceptT $ do
-  (openResult, _) <- liftIO
-    . P.runMake P.defaultOptions
-    . P.rebuildModule (buildMakeActions
-                       >>= shushProgress
-                       >>= shushCodegen
-                       $ makeEnv) externs $ openModuleExports m
+
+  let makeAct :: forall make. P.MonadMake make => P.MakeActions make
+      makeAct = shushProgress (shushCodegen (buildMakeActions makeEnv) makeEnv) makeEnv
+  (openResult, _) <- liftIO (P.runMake P.defaultOptions (P.rebuildModule makeAct  externs $ openModuleExports m))
   case openResult of
     Left _ ->
       throwError (GeneralError "Failed when rebuilding with open exports")
@@ -143,7 +142,7 @@ data MakeActionsEnv =
   }
 
 -- | Builds the default @MakeActions@ from a @MakeActionsEnv@
-buildMakeActions :: MakeActionsEnv -> P.MakeActions P.Make
+buildMakeActions :: P.MonadMake make => MakeActionsEnv -> P.MakeActions make
 buildMakeActions MakeActionsEnv{..} =
   P.buildMakeActions
     maeOutputDirectory
@@ -152,12 +151,12 @@ buildMakeActions MakeActionsEnv{..} =
     maePrefixComment
 
 -- | Shuts the compiler up about progress messages
-shushProgress :: P.MakeActions P.Make -> MakeActionsEnv -> P.MakeActions P.Make
+shushProgress :: (forall make. P.MonadMake make => P.MakeActions make) -> MakeActionsEnv -> (forall make. P.MonadMake make => P.MakeActions make)
 shushProgress ma _ =
   ma { P.progress = \_ -> pure () }
 
 -- | Stops any kind of codegen
-shushCodegen :: P.MakeActions P.Make -> MakeActionsEnv -> P.MakeActions P.Make
+shushCodegen :: (forall make. P.MonadMake make => P.MakeActions make) -> MakeActionsEnv -> (forall make. P.MonadMake make => P.MakeActions make) -- P.MakeActions P.MakeIO -> MakeActionsEnv -> P.MakeActions P.MakeIO
 shushCodegen ma MakeActionsEnv{..} =
   ma { P.codegen = \_ _ _ -> pure ()
      , P.ffiCodegen = \_ -> pure ()

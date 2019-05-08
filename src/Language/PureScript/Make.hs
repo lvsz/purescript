@@ -48,12 +48,12 @@ import           System.FilePath (replaceExtension)
 --
 -- This function is used for fast-rebuild workflows (PSCi and psc-ide are examples).
 rebuildModule
-  :: forall m
-   . (Monad m, MonadBaseControl IO m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
-  => MakeActions m
+  :: forall make. (MonadMake make, MonadBaseControl IO make)
+   -- . (Monad m, MonadBaseControl IO m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
+  => MakeActions make
   -> [ExternsFile]
   -> Module
-  -> m ExternsFile
+  -> make ExternsFile
 rebuildModule MakeActions{..} externs m@(Module _ _ moduleName _ _) = do
   progress $ CompilingModule moduleName
   let env = foldl' (flip applyExternsFileToEnvironment) initEnvironment externs
@@ -83,10 +83,10 @@ rebuildModule MakeActions{..} externs m@(Module _ _ moduleName _ _) = do
 --
 -- If timestamps have not changed, the externs file can be used to provide the module's types without
 -- having to typecheck the module again.
-make :: forall m. (Monad m, MonadBaseControl IO m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
-     => MakeActions m
+make :: forall make. (MonadMake make, MonadBaseControl IO make) -- (Monad m, MonadBaseControl IO m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
+     => MakeActions make
      -> [Module]
-     -> m [ExternsFile]
+     -> make [ExternsFile]
 make ma@MakeActions{..} ms = do
   checkModuleNames
 
@@ -115,10 +115,10 @@ make ma@MakeActions{..} ms = do
   return (map (lookupResult . getModuleName) sorted)
 
   where
-  checkModuleNames :: m ()
+  checkModuleNames :: make ()
   checkModuleNames = checkNoPrim *> checkModuleNamesAreUnique
 
-  checkNoPrim :: m ()
+  checkNoPrim :: make ()
   checkNoPrim =
     for_ ms $ \m ->
       let mn = getModuleName m
@@ -127,7 +127,7 @@ make ma@MakeActions{..} ms = do
              . errorMessage' (getModuleSourceSpan m)
              $ CannotDefinePrimModules mn
 
-  checkModuleNamesAreUnique :: m ()
+  checkModuleNamesAreUnique :: make ()
   checkModuleNamesAreUnique =
     for_ (findDuplicates getModuleName ms) $ \mss ->
       throwError . flip foldMap mss $ \ms' ->
@@ -145,7 +145,7 @@ make ma@MakeActions{..} ms = do
   inOrderOf :: (Ord a) => [a] -> [a] -> [a]
   inOrderOf xs ys = let s = S.fromList xs in filter (`S.member` s) ys
 
-  buildModule :: BuildPlan -> Module -> [ModuleName] -> m ()
+  buildModule :: BuildPlan -> Module -> [ModuleName] -> make ()
   buildModule buildPlan m@(Module _ _ moduleName _ _) deps = flip catchError (complete Nothing . Just) $ do
     -- We need to wait for dependencies to be built, before checking if the current
     -- module should be rebuilt, so the first thing to do is to wait on the
@@ -158,7 +158,7 @@ make ma@MakeActions{..} ms = do
         complete (Just (warnings, exts)) Nothing
       Nothing -> complete Nothing Nothing
     where
-    complete :: Maybe (MultipleErrors, ExternsFile) -> Maybe MultipleErrors -> m ()
+    complete :: Maybe (MultipleErrors, ExternsFile) -> Maybe MultipleErrors -> make ()
     complete = BuildPlan.markComplete buildPlan moduleName
 
 -- | Infer the module name for a module by looking for the same filename with

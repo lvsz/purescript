@@ -51,19 +51,19 @@ printErrors errs = liftIO $ do
 
 -- | This is different than the runMake in 'Language.PureScript.Make' in that it specifies the
 -- options and ignores the warning messages.
-runMake :: P.Make a -> IO (Either P.MultipleErrors a)
+runMake :: (forall make. P.MonadMake make => make a) -> IO (Either P.MultipleErrors a)
 runMake mk = fst <$> P.runMake P.defaultOptions mk
 
 -- | Rebuild a module, using the cached externs data for dependencies.
 rebuild
   :: [P.ExternsFile]
   -> P.Module
-  -> P.Make (P.ExternsFile, P.Environment)
+  -> (forall make. P.MonadMake make => make (P.ExternsFile, P.Environment))
 rebuild loadedExterns m = do
     externs <- P.rebuildModule buildActions loadedExterns m
     return (externs, foldl' (flip P.applyExternsFileToEnvironment) P.initEnvironment (loadedExterns ++ [externs]))
   where
-    buildActions :: P.MakeActions P.Make
+    buildActions :: forall make. P.MonadMake make => P.MakeActions make
     buildActions =
       (P.buildMakeActions modulesDir
                           filePathMap
@@ -76,13 +76,13 @@ rebuild loadedExterns m = do
 -- | Build the collection of modules from scratch. This is usually done on startup.
 make
   :: [(FilePath, P.Module)]
-  -> P.Make ([P.ExternsFile], P.Environment)
+  -> (forall make. P.MonadMake make => make ([P.ExternsFile], P.Environment))
 make ms = do
     foreignFiles <- P.inferForeignModules filePathMap
     externs <- P.make (buildActions foreignFiles) (map snd ms)
     return (externs, foldl' (flip P.applyExternsFileToEnvironment) P.initEnvironment externs)
   where
-    buildActions :: M.Map P.ModuleName FilePath -> P.MakeActions P.Make
+    buildActions :: M.Map P.ModuleName FilePath -> (forall make. P.MonadMake make => P.MakeActions make)
     buildActions foreignFiles =
       P.buildMakeActions modulesDir
                          filePathMap
@@ -127,7 +127,7 @@ handleReloadState reload = do
   files <- liftIO $ concat <$> traverse glob globs
   e <- runExceptT $ do
     modules <- ExceptT . liftIO $ loadAllModules files
-    (externs, _) <- ExceptT . liftIO . runMake . make $ modules
+    (externs, _) <- (\x -> ExceptT (liftIO (runMake (make x)))) $ modules
     return (map snd modules, externs)
   case e of
     Left errs -> printErrors errs
@@ -153,7 +153,7 @@ handleExpression
 handleExpression evaluate val = do
   st <- get
   let m = createTemporaryModule True st val
-  e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+  e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
   case e of
     Left errs -> printErrors errs
     Right _ -> do
@@ -171,7 +171,7 @@ handleDecls
 handleDecls ds = do
   st <- gets (updateLets (++ ds))
   let m = createTemporaryModule False st (P.Literal P.nullSourceSpan (P.ObjectLiteral []))
-  e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+  e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
   case e of
     Left err -> printErrors err
     Right _ -> put st
@@ -255,7 +255,7 @@ handleImport
 handleImport im = do
    st <- gets (updateImportedModules (im :))
    let m = createTemporaryModuleForImports st
-   e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+   e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
    case e of
      Left errs -> printErrors errs
      Right _  -> put st
@@ -269,7 +269,7 @@ handleTypeOf
 handleTypeOf print' val = do
   st <- get
   let m = createTemporaryModule False st val
-  e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+  e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
   case e of
     Left errs -> printErrors errs
     Right (_, env') ->
@@ -287,7 +287,7 @@ handleKindOf print' typ = do
   st <- get
   let m = createTemporaryModuleForKind st typ
       mName = P.ModuleName [P.ProperName "$PSCI"]
-  e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+  e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
   case e of
     Left errs -> printErrors errs
     Right (_, env') ->
@@ -353,7 +353,7 @@ handleSetInteractivePrint print' new = do
   st <- get
   let expr = P.Literal internalSpan (P.NumericLiteral (Left 0))
   let m = createTemporaryModule True st expr
-  e <- liftIO . runMake $ rebuild (map snd (psciLoadedExterns st)) m
+  e <- liftIO (runMake (rebuild (map snd (psciLoadedExterns st)) m))
   case e of
     Left errs -> do
       modify (setInteractivePrint current)

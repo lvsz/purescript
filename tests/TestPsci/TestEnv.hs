@@ -39,7 +39,7 @@ initTestPSCiEnv = do
       print err >> exitFailure
     Right modules -> do
       -- Make modules
-      makeResultOrError <- runMake . make $ modules
+      makeResultOrError <- runMake (make modules)
       case makeResultOrError of
         Left errs -> putStrLn (P.prettyPrintMultipleErrors P.defaultPPEOptions errs) >> exitFailure
         Right (externs, _) ->

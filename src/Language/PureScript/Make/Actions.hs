@@ -82,29 +82,30 @@ renderProgressMessage (CompilingModule mn) = "Compiling " ++ T.unpack (runModule
 -- * The particular backend being used (JavaScript, C++11, etc.)
 --
 -- * The details of how files are read/written etc.
-data MakeActions m = MakeActions
-  { getInputTimestamp :: ModuleName -> m (Either RebuildPolicy (Maybe UTCTime))
+data MakeActions make = MakeActions
+  { getInputTimestamp :: ModuleName -> make (Either RebuildPolicy (Maybe UTCTime))
   -- ^ Get the timestamp for the input file(s) for a module. If there are multiple
   -- files (@.purs@ and foreign files, for example) the timestamp should be for
   -- the most recently modified file.
-  , getOutputTimestamp :: ModuleName -> m (Maybe UTCTime)
+  , getOutputTimestamp :: ModuleName -> make (Maybe UTCTime)
   -- ^ Get the timestamp for the output files for a module. This should be the
   -- timestamp for the oldest modified file, or 'Nothing' if any of the required
   -- output files are missing.
-  , readExterns :: ModuleName -> m (FilePath, Externs)
+  , readExterns :: ModuleName -> make (FilePath, Externs)
   -- ^ Read the externs file for a module as a string and also return the actual
   -- path for the file.
-  , codegen :: CF.Module CF.Ann -> Environment -> Externs -> SupplyT m ()
+  , codegen :: CF.Module CF.Ann -> Environment -> Externs -> SupplyT make ()
   -- ^ Run the code generator for the module and write any required output files.
-  , ffiCodegen :: CF.Module CF.Ann -> m ()
+  , ffiCodegen :: CF.Module CF.Ann -> make ()
   -- ^ Check ffi and print it in the output directory.
-  , progress :: ProgressMessage -> m ()
+  , progress :: ProgressMessage -> make ()
   -- ^ Respond to a progress update.
   }
 
 -- | A set of make actions that read and write modules from the given directory.
 buildMakeActions
-  :: FilePath
+  :: MonadMake make
+  => FilePath
   -- ^ the output directory
   -> M.Map ModuleName (Either RebuildPolicy FilePath)
   -- ^ a map between module names and paths to the file containing the PureScript module
@@ -112,12 +113,12 @@ buildMakeActions
   -- ^ a map between module name and the file containing the foreign javascript for the module
   -> Bool
   -- ^ Generate a prefix comment?
-  -> MakeActions Make
+  -> MakeActions make
 buildMakeActions outputDir filePathMap foreigns usePrefix =
     MakeActions getInputTimestamp getOutputTimestamp readExterns codegen ffiCodegen progress
   where
 
-  getInputTimestamp :: ModuleName -> Make (Either RebuildPolicy (Maybe UTCTime))
+  getInputTimestamp :: MonadMake make => ModuleName -> make (Either RebuildPolicy (Maybe UTCTime))
   getInputTimestamp mn = do
     let path = fromMaybe (internalError "Module has no filename in 'make'") $ M.lookup mn filePathMap
     e1 <- traverse getTimestamp path
@@ -135,19 +136,19 @@ buildMakeActions outputDir filePathMap foreigns usePrefix =
     JSSourceMap -> outputFilename mn "index.js.map"
     CoreFn -> outputFilename mn "corefn.json"
 
-  getOutputTimestamp :: ModuleName -> Make (Maybe UTCTime)
+  getOutputTimestamp :: MonadMake make => ModuleName -> make (Maybe UTCTime)
   getOutputTimestamp mn = do
     codegenTargets <- asks optionsCodegenTargets
     let outputPaths = [outputFilename mn "externs.json"] <> fmap (targetFilename mn) (S.toList codegenTargets)
     timestamps <- traverse getTimestamp outputPaths
     pure $ fmap minimum . NEL.nonEmpty =<< sequence timestamps
 
-  readExterns :: ModuleName -> Make (FilePath, Externs)
+  readExterns :: MonadMake make => ModuleName -> make (FilePath, Externs)
   readExterns mn = do
     let path = outputDir </> T.unpack (runModuleName mn) </> "externs.json"
     (path, ) <$> readTextFile path
 
-  codegen :: CF.Module CF.Ann -> Environment -> Externs -> SupplyT Make ()
+  codegen :: MonadMake make => CF.Module CF.Ann -> Environment -> Externs -> SupplyT make ()
   codegen m _ exts = do
     let mn = CF.moduleName m
     lift $ writeTextFile (outputFilename mn "externs.json") exts
@@ -178,7 +179,7 @@ buildMakeActions outputDir filePathMap foreigns usePrefix =
         writeTextFile jsFile (B.fromStrict $ TE.encodeUtf8 $ js <> mapRef)
         when sourceMaps $ genSourceMap dir mapFile (length prefix) mappings
 
-  ffiCodegen :: CF.Module CF.Ann -> Make ()
+  ffiCodegen :: MonadMake make => CF.Module CF.Ann -> make ()
   ffiCodegen m = do
     codegenTargets <- asks optionsCodegenTargets
     when (S.member JS codegenTargets) $ do
@@ -194,7 +195,7 @@ buildMakeActions outputDir filePathMap foreigns usePrefix =
                 | otherwise -> return ()
       for_ (mn `M.lookup` foreigns) (readTextFile >=> writeTextFile foreignFile)
 
-  genSourceMap :: String -> String -> Int -> [SMap] -> Make ()
+  genSourceMap :: MonadMake make => String -> String -> Int -> [SMap] -> make ()
   genSourceMap dir mapFile extraLines mappings = do
     let pathToDir = iterate (".." </>) ".." !! length (splitPath $ normalise outputDir)
         sourceFile = case mappings of
@@ -221,14 +222,14 @@ buildMakeActions outputDir filePathMap foreigns usePrefix =
   requiresForeign :: CF.Module a -> Bool
   requiresForeign = not . null . CF.moduleForeign
 
-  getTimestamp :: FilePath -> Make (Maybe UTCTime)
+  getTimestamp :: MonadMake make => FilePath -> make (Maybe UTCTime)
   getTimestamp path = makeIO (const (ErrorMessage [] $ CannotGetFileInfo path)) $ do
     exists <- doesFileExist path
     if exists
       then Just <$> getModificationTime path
       else pure Nothing
 
-  writeTextFile :: FilePath -> B.ByteString -> Make ()
+  writeTextFile :: MonadMake make => FilePath -> B.ByteString -> make ()
   writeTextFile path text = makeIO (const (ErrorMessage [] $ CannotWriteFile path)) $ do
     mkdirp path
     B.writeFile path text
@@ -236,12 +237,12 @@ buildMakeActions outputDir filePathMap foreigns usePrefix =
     mkdirp :: FilePath -> IO ()
     mkdirp = createDirectoryIfMissing True . takeDirectory
 
-  progress :: ProgressMessage -> Make ()
+  progress :: MonadMake make => ProgressMessage -> make ()
   progress = liftIO . putStrLn . renderProgressMessage
 
 -- | Check that the declarations in a given PureScript module match with those
 -- in its corresponding foreign module.
-checkForeignDecls :: CF.Module ann -> FilePath -> Make ()
+checkForeignDecls :: MonadMake make => CF.Module ann -> FilePath -> make ()
 checkForeignDecls m path = do
   jsStr <- readTextFile path
   js <- either (errorParsingModule . Bundle.UnableToParseModule) pure $ JS.parse (LBU8.toString jsStr) path
@@ -267,13 +268,13 @@ checkForeignDecls m path = do
   mname = CF.moduleName m
   modSS = CF.moduleSourceSpan m
 
-  errorParsingModule :: Bundle.ErrorMessage -> Make a
+  errorParsingModule :: MonadMake make => Bundle.ErrorMessage -> make a
   errorParsingModule = throwError . errorMessage' modSS . ErrorParsingFFIModule path . Just
 
   getExps :: JS.JSAST -> Either Bundle.ErrorMessage [String]
   getExps = Bundle.getExportedIdentifiers (T.unpack (runModuleName mname))
 
-  errorInvalidForeignIdentifiers :: [String] -> Make a
+  errorInvalidForeignIdentifiers :: MonadMake make => [String] -> make a
   errorInvalidForeignIdentifiers =
     throwError . mconcat . map (errorMessage . InvalidFFIIdentifier mname . T.pack)
 

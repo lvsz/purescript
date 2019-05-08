@@ -3,6 +3,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExplicitForAll #-}
+{-# LANGUAGE Rank2Types #-}
 
 module TestCompiler where
 
@@ -72,7 +74,7 @@ spec = do
     let modules = map snd ms
     supportExterns <- runExceptT $ do
       foreigns <- inferForeignModules ms
-      externs <- ExceptT . fmap fst . runTest $ P.make (makeActions modules foreigns) modules
+      externs <- ExceptT (fmap fst (runTest (P.make (makeActions modules foreigns) modules)))
       return (externs, foreigns)
     case supportExterns of
       Left errs -> fail (P.prettyPrintMultipleErrors P.defaultPPEOptions errs)
@@ -164,27 +166,27 @@ trim = dropWhile isSpace >>> reverse >>> dropWhile isSpace >>> reverse
 modulesDir :: FilePath
 modulesDir = ".test_modules" </> "node_modules"
 
-makeActions :: [P.Module] -> M.Map P.ModuleName FilePath -> P.MakeActions P.Make
+makeActions :: [P.Module] -> M.Map P.ModuleName FilePath -> (forall make. P.MonadMake make => P.MakeActions make)
 makeActions modules foreigns = (P.buildMakeActions modulesDir (P.internalError "makeActions: input file map was read.") foreigns False)
                                { P.getInputTimestamp = getInputTimestamp
                                , P.getOutputTimestamp = getOutputTimestamp
                                , P.progress = const (pure ())
                                }
   where
-  getInputTimestamp :: P.ModuleName -> P.Make (Either P.RebuildPolicy (Maybe UTCTime))
+  getInputTimestamp :: P.ModuleName -> (forall make. P.MonadMake make => make (Either P.RebuildPolicy (Maybe UTCTime)))
   getInputTimestamp mn
     | isSupportModule (P.runModuleName mn) = return (Left P.RebuildNever)
     | otherwise = return (Left P.RebuildAlways)
     where
     isSupportModule = flip elem (map (P.runModuleName . P.getModuleName) modules)
 
-  getOutputTimestamp :: P.ModuleName -> P.Make (Maybe UTCTime)
+  getOutputTimestamp :: P.ModuleName -> (forall make. P.MonadMake make => make (Maybe UTCTime))
   getOutputTimestamp mn = do
     let filePath = modulesDir </> T.unpack (P.runModuleName mn)
     exists <- liftIO $ doesDirectoryExist filePath
     return (if exists then Just (P.internalError "getOutputTimestamp: read timestamp") else Nothing)
 
-runTest :: P.Make a -> IO (Either P.MultipleErrors a, P.MultipleErrors)
+runTest :: (forall make. P.MonadMake make => make a) -> IO (Either P.MultipleErrors a, P.MultipleErrors)
 runTest = P.runMake P.defaultOptions
 
 compile
