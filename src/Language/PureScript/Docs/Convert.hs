@@ -2,8 +2,7 @@
 -- from Language.PureScript.Docs.
 
 module Language.PureScript.Docs.Convert
-  ( convertModules
-  , convertTaggedModulesInPackage
+  ( convertTaggedModulesInPackage
   , convertModulesInPackage
   , convertModule
   ) where
@@ -65,9 +64,22 @@ convertTaggedModulesInPackage taggedModules modulesDeps =
   pairDocModule docModule = (, docModule) <$> getModuleFile docModule
 
 -- |
--- Like convertModules, except that it takes a list of modules, together with
--- their dependency status, and discards dependency modules in the resulting
--- documentation.
+-- Convert a list of modules to the intermediate format, designed for producing
+-- documentation from.
+--
+-- The second argument specifies which modules are local and which are from
+-- dependencies. If a module is part of the 'current package' it should not
+-- appear in the map. If it is from a dependency it should appear in the map,
+-- mapping to the name of the package it comes from. Only local modules are
+-- included in the result.
+--
+-- Note that the whole module dependency graph must be included in the list; if
+-- some modules import things from other modules, then those modules must also
+-- be included.
+--
+-- For value declarations, if explicit type signatures are omitted, or a
+-- wildcard type is used, then we typecheck the modules and use the inferred
+-- types.
 --
 convertModulesInPackage ::
   (MonadError P.MultipleErrors m) =>
@@ -99,26 +111,6 @@ convertModulesInPackageWithEnv modules modulesDeps =
 
   isLocal :: P.ModuleName -> Bool
   isLocal = not . flip Map.member modulesDeps
-
--- |
--- Convert a group of modules to the intermediate format, designed for
--- producing documentation from.
---
--- Note that the whole module dependency graph must be included in the list; if
--- some modules import things from other modules, then those modules must also
--- be included.
---
--- For value declarations, if explicit type signatures are omitted, or a
--- wildcard type is used, then we typecheck the modules and use the inferred
--- types.
---
-convertModules ::
-  (MonadError P.MultipleErrors m) =>
-  (P.ModuleName -> InPackage P.ModuleName) ->
-  [P.Module] ->
-  m [Module]
-convertModules withPackage =
-  fmap fst . convertModulesWithEnv withPackage
 
 convertModulesWithEnv ::
   (MonadError P.MultipleErrors m) =>
