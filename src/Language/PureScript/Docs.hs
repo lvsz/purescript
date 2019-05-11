@@ -2,9 +2,9 @@
 -- | Data types and functions for rendering generated documentation from
 -- PureScript code, in a variety of formats.
 
-module Language.PureScript.Docs (
-  module Docs
-) where
+module Language.PureScript.Docs
+  ( module Docs
+  ) where
 
 import Language.PureScript.Docs.Convert as Docs
 import Language.PureScript.Docs.Prim as Docs

@@ -2,8 +2,7 @@
 -- from Language.PureScript.Docs.
 
 module Language.PureScript.Docs.Convert
-  ( convertTaggedModulesInPackage
-  , convertModulesInPackage
+  ( collectDocs
   , convertModule
   ) where
 
@@ -13,10 +12,15 @@ import Control.Arrow ((&&&))
 import Control.Category ((>>>))
 import Control.Monad.Writer.Strict (runWriterT)
 import Control.Monad.Supply (evalSupplyT)
+import qualified Data.Aeson.BetterErrors as ABE
+import qualified Data.ByteString as BS
 import Data.Functor (($>))
 import qualified Data.Map as Map
 import Data.String (String)
+import qualified Data.Text as T
+import System.FilePath ((</>))
 
+import Language.PureScript.Docs.ParseInPackage (parseFilesInPackages)
 import Language.PureScript.Docs.Convert.ReExports (updateReExports)
 import Language.PureScript.Docs.Convert.Single (convertSingleModule)
 import Language.PureScript.Docs.Prim (primModules)
@@ -32,87 +36,138 @@ import qualified Language.PureScript.Names as P
 import qualified Language.PureScript.Parser as P
 import qualified Language.PureScript.Sugar as P
 import qualified Language.PureScript.Types as P
-import qualified Language.PureScript.TypeChecker as P
 
 import Web.Bower.PackageMeta (PackageName)
 
 import Text.Parsec (eof)
 
 -- |
--- Like convertModuleInPackage, but with the modules tagged by their
--- file paths.
+-- Given a compiler output directory, a list of input PureScript source files,
+-- and a list of dependency PureScript source files, produce documentation for
+-- the input files in the intermediate documentation format. Note that
+-- dependency files are not included in the result.
 --
-convertTaggedModulesInPackage ::
-  (MonadError P.MultipleErrors m) =>
-  [(FilePath, P.Module)] ->
-  Map P.ModuleName PackageName ->
-  m [(FilePath, Module)]
-convertTaggedModulesInPackage taggedModules modulesDeps =
-  traverse pairDocModule =<< convertModulesInPackage modules modulesDeps
+-- The output directory must be up to date with respect to the provided input
+-- and dependency files, and the files must have been built with the docs
+-- codegen target, i.e. --codegen docs.
+--
+collectDocs ::
+  forall m.
+  (MonadError P.MultipleErrors m, MonadIO m) =>
+  FilePath ->
+  [FilePath] ->
+  [(PackageName, FilePath)] ->
+  m ([(FilePath, Module)], Map P.ModuleName PackageName)
+collectDocs outputDir inputFiles depsFiles = do
+  -- TODO Check that the outputDir is up to date relative to the input files
+
+  (parsedModules, modulesDeps) <- parseFilesInPackages inputFiles depsFiles
+
+  -- This is only necessary because we need to get hold of an Env for adding
+  -- re-exports. Hopefully we will soon be able to use externs to achieve this
+  -- instead.
+  env <- getEnvFromModules (map snd parsedModules)
+
+  let (withPackage, shouldKeep) =
+        packageDiscriminators modulesDeps
+  let go =
+        operateAndRetag P.getModuleName modName $ \ms -> do
+          docsModules <- traverse (liftIO . parseDocsJsonFile outputDir . P.getModuleName) ms
+          addReExports withPackage docsModules env
+
+  docsModules <- go parsedModules
+
+  pure ((filter (shouldKeep . modName . snd) docsModules), modulesDeps)
+
   where
-  modules = map snd taggedModules
+  packageDiscriminators modulesDeps =
+    let
+      shouldKeep mn = isLocal mn && not (P.isBuiltinModuleName mn)
 
-  moduleNameToFileMap =
-    Map.fromList $ swap . fmap P.getModuleName <$> taggedModules
+      withPackage :: P.ModuleName -> InPackage P.ModuleName
+      withPackage mn =
+        case Map.lookup mn modulesDeps of
+          Just pkgName -> FromDep pkgName mn
+          Nothing -> Local mn
 
-  getModuleFile docModule =
-    case Map.lookup (modName docModule) moduleNameToFileMap of
-      Just filePath -> pure filePath
-      Nothing -> throwError . P.errorMessage $
-        P.ModuleNotFound $ modName docModule
+      isLocal :: P.ModuleName -> Bool
+      isLocal = not . flip Map.member modulesDeps
+    in
+      (withPackage, shouldKeep)
 
-  pairDocModule docModule = (, docModule) <$> getModuleFile docModule
+  getEnvFromModules :: [P.Module] -> m P.Env
+  getEnvFromModules =
+    P.sortModules P.moduleSignature
+      >>> fmap (fst >>> map P.importPrim)
+      >=> partiallyDesugar []
+      >>> fmap fst
 
--- |
--- Convert a list of modules to the intermediate format, designed for producing
--- documentation from.
---
--- The second argument specifies which modules are local and which are from
--- dependencies. If a module is part of the 'current package' it should not
--- appear in the map. If it is from a dependency it should appear in the map,
--- mapping to the name of the package it comes from. Only local modules are
--- included in the result.
---
--- Note that the whole module dependency graph must be included in the list; if
--- some modules import things from other modules, then those modules must also
--- be included.
---
--- For value declarations, if explicit type signatures are omitted, or a
--- wildcard type is used, then we typecheck the modules and use the inferred
--- types.
---
-convertModulesInPackage ::
-  (MonadError P.MultipleErrors m) =>
-  [P.Module] ->
-  Map P.ModuleName PackageName ->
-  m [Module]
-convertModulesInPackage modules modulesDeps =
-  go modules
-  where
-  go =
-     convertModules withPackage
-     >>> fmap (filter (shouldKeep . modName))
+parseDocsJsonFile :: FilePath -> P.ModuleName -> IO Module
+parseDocsJsonFile outputDir mn =
+  let
+    filePath = outputDir </> T.unpack (P.runModuleName mn) </> "docs.json"
+  in do
+    str <- BS.readFile filePath
+    case ABE.parseStrict asModule str of
+      Right m -> pure m
+      Left err -> P.internalError $
+        "Failed to decode: " ++ filePath ++
+        intercalate "\n" (map T.unpack (ABE.displayError displayPackageError err))
 
-  shouldKeep mn = isLocal mn && not (P.isBuiltinModuleName mn)
-
-  withPackage :: P.ModuleName -> InPackage P.ModuleName
-  withPackage mn =
-    case Map.lookup mn modulesDeps of
-      Just pkgName -> FromDep pkgName mn
-      Nothing -> Local mn
-
-  isLocal :: P.ModuleName -> Bool
-  isLocal = not . flip Map.member modulesDeps
-
-convertModules ::
+addReExports ::
   (MonadError P.MultipleErrors m) =>
   (P.ModuleName -> InPackage P.ModuleName) ->
-  [P.Module] ->
+  [Module] ->
+  P.Env ->
   m [Module]
-convertModules withPackage =
-  P.sortModules P.moduleSignature
-    >>> fmap (fst >>> map P.importPrim)
-    >=> convertSorted withPackage
+addReExports withPackage docsModules env = do
+  -- We add the Prim docs modules here, so that docs generation is still
+  -- possible if the modules we are generating docs for re-export things from
+  -- Prim submodules. Note that the Prim modules do not exist as
+  -- @Language.PureScript.Module@ values because they do not contain anything
+  -- that exists at runtime. However, we have pre-constructed
+  -- @Language.PureScript.Docs.Types.Module@ values for them, which we use
+  -- here.
+  let moduleMap =
+        Map.fromList
+          (map (modName &&& identity)
+               (docsModules ++ primModules))
+
+  -- Set up the traversal order for re-export handling so that Prim modules
+  -- come first.
+  let primModuleNames = Map.keys P.primEnv
+  let traversalOrder = primModuleNames ++ map modName docsModules
+  let withReExports = updateReExports env traversalOrder withPackage moduleMap
+  pure (Map.elems withReExports)
+
+-- |
+-- Perform an operation on a list of things which are tagged, and reassociate
+-- the things with their tags afterwards.
+--
+operateAndRetag ::
+  forall m a b key tag.
+  Monad m =>
+  Ord key =>
+  Show key =>
+  (a -> key) ->
+  (b -> key) ->
+  ([a] -> m [b]) ->
+  [(tag, a)] ->
+  m [(tag, b)]
+operateAndRetag keyA keyB operation input =
+  fmap (map retag) $ operation (map snd input)
+  where
+  tags :: Map key tag
+  tags = Map.fromList $ map (\(tag, a) -> (keyA a, tag)) input
+
+  findTag :: key -> tag
+  findTag key =
+    case Map.lookup key tags of
+      Just tag -> tag
+      Nothing -> P.internalError ("Missing tag for: " ++ show key)
+
+  retag :: b -> (tag, b)
+  retag b = (findTag (keyB b), b)
 
 -- |
 -- Convert a single module to a Docs.Module, making use of a pre-existing
@@ -129,87 +184,6 @@ convertModule externs checkEnv m =
   partiallyDesugar externs [m] >>= \case
     (_, [m']) -> pure (insertValueTypes checkEnv (convertSingleModule m'))
     _ -> P.internalError "partiallyDesugar did not return a singleton"
-
--- |
--- Convert a sorted list of modules, returning both the list of converted
--- modules and the Env produced during desugaring.
---
-convertSorted ::
-  (MonadError P.MultipleErrors m) =>
-  (P.ModuleName -> InPackage P.ModuleName) ->
-  [P.Module] ->
-  m [Module]
-convertSorted withPackage modules = do
-  (env, convertedModules) <- second (map convertSingleModule) <$> partiallyDesugar [] modules
-
-  modulesWithTypes <- typeCheckIfNecessary modules convertedModules
-
-  -- We add the Prim docs modules here, so that docs generation is still
-  -- possible if the modules we are generating docs for re-export things from
-  -- Prim submodules. Note that the Prim modules do not exist as
-  -- @Language.PureScript.Module@ values because they do not contain anything
-  -- that exists at runtime. However, we have pre-constructed
-  -- @Language.PureScript.Docs.Types.Module@ values for them, which we use
-  -- here.
-  let moduleMap =
-        Map.fromList
-          (map (modName &&& identity)
-               (modulesWithTypes ++ primModules))
-
-  -- Set up the traversal order for re-export handling so that Prim modules
-  -- come first.
-  let primModuleNames = Map.keys P.primEnv
-  let traversalOrder = primModuleNames ++ map P.getModuleName modules
-  let withReExports = updateReExports env traversalOrder withPackage moduleMap
-  pure (Map.elems withReExports)
-
--- |
--- If any exported value declarations have either wildcard type signatures, or
--- none at all, then typecheck in order to fill them in with the inferred
--- types.
---
-typeCheckIfNecessary ::
-  (MonadError P.MultipleErrors m) =>
-  [P.Module] ->
-  [Module] ->
-  m [Module]
-typeCheckIfNecessary modules convertedModules =
-  if any hasWildcards convertedModules
-    then go
-    else pure convertedModules
-
-  where
-  hasWildcards = any (isWild . declInfo) . modDeclarations
-  isWild (ValueDeclaration P.TypeWildcard{}) = True
-  isWild _ = False
-
-  go = do
-    checkEnv <- snd <$> typeCheck modules
-    pure (map (insertValueTypes checkEnv) convertedModules)
-
--- |
--- Typechecks all the modules together. Also returns the final 'P.Environment',
--- which is useful for adding in inferred types where explicit declarations
--- were not provided.
---
-typeCheck ::
-  (MonadError P.MultipleErrors m) =>
-  [P.Module] ->
-  m ([P.Module], P.Environment)
-typeCheck =
-  (P.desugar [] >=> check)
-  >>> fmap (second P.checkEnv)
-  >>> evalSupplyT 0
-  >>> ignoreWarnings
-
-  where
-  check ms =
-    runStateT
-      (traverse P.typeCheckModule ms)
-      (P.emptyCheckState P.initEnvironment)
-
-  ignoreWarnings =
-    fmap fst . runWriterT
 
 -- |
 -- Updates all the types of the ValueDeclarations inside the module based on

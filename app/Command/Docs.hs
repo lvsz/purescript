@@ -45,11 +45,12 @@ data PSCDocsOptions = PSCDocsOptions
   { _pscdFormat :: Format
   , _pscdInputFiles  :: [FilePath]
   , _pscdDocgen :: DocgenOutput
+  , _pscdCompileOutputDir :: FilePath
   }
   deriving (Show)
 
 docgen :: PSCDocsOptions -> IO ()
-docgen (PSCDocsOptions fmt inputGlob output) = do
+docgen (PSCDocsOptions fmt inputGlob output compileOutput) = do
   input <- concat <$> mapM glob inputGlob
   when (null input) $ do
     hPutStrLn stderr "purs docs: no input files."
@@ -61,10 +62,10 @@ docgen (PSCDocsOptions fmt inputGlob output) = do
     Etags -> mapM_ putStrLn $ dumpEtags fileMs
     Ctags -> mapM_ putStrLn $ dumpCtags fileMs
     Html -> do
-      let outputDir = "./generated-docs" -- TODO: make this configurable
+      let genDocsDir = "./generated-docs" -- TODO: make this configurable
       let msHtml = map asHtml (D.primModules ++ ms)
-      createDirectoryIfMissing False outputDir
-      writeHtmlModules outputDir msHtml
+      createDirectoryIfMissing False genDocsDir
+      writeHtmlModules genDocsDir msHtml
 
     Markdown ->
       case output of
@@ -107,9 +108,9 @@ docgen (PSCDocsOptions fmt inputGlob output) = do
   takeByName = takeModulesByName D.modName
   takeByName' = takeModulesByName' D.modName
 
-  parseAndConvert input =
-    runExceptT (D.parseFilesInPackages input []
-                >>= uncurry D.convertTaggedModulesInPackage)
+  parseAndConvert :: [FilePath] -> IO [(FilePath, D.Module)]
+  parseAndConvert input = do
+    runExceptT (fmap fst (D.collectDocs compileOutput input []))
     >>= successOrExit
 
 -- |
@@ -138,6 +139,12 @@ inputFile = Opts.strArgument $
      Opts.metavar "FILE"
   <> Opts.help "The input .purs file(s)"
 
+outputDir :: Opts.Parser FilePath
+outputDir = Opts.option Opts.auto $ Opts.value "output"
+         <> Opts.long "output"
+         <> Opts.metavar "DIR"
+         <> Opts.help "Compiler output directory"
+
 instance Read Format where
   readsPrec _ "etags" = [(Etags, "")]
   readsPrec _ "ctags" = [(Ctags, "")]
@@ -156,8 +163,8 @@ docgenModule = Opts.strOption $
                    Opts.long "docgen"
                 <> Opts.help "A list of module names which should appear in the output. This can optionally include file paths to write individual modules to, by separating with a colon ':'. For example, Prelude:docs/Prelude.md. This option may be specified multiple times."
 
-pscDocsOptions :: Opts.Parser (Format, [FilePath], [String])
-pscDocsOptions = (,,) <$> format <*> many inputFile <*> many docgenModule
+pscDocsOptions :: Opts.Parser (Format, FilePath, [FilePath], [String])
+pscDocsOptions = (,,,) <$> format <*> outputDir <*> many inputFile <*> many docgenModule
 
 parseDocgen :: [String] -> Either String DocgenOutput
 parseDocgen [] = Right EverythingToStdOut
@@ -198,10 +205,10 @@ combine (x:xs) = foldM go (initial x) xs
   go (ToFiles ms) (IToFile m)    = Right (ToFiles (m:ms))
   go _ _ = Left "Can't mix module names and module name/file path pairs in the same invocation."
 
-buildOptions :: (Format, [FilePath], [String]) -> IO PSCDocsOptions
-buildOptions (fmt, input, mapping) =
+buildOptions :: (Format, FilePath, [FilePath], [String]) -> IO PSCDocsOptions
+buildOptions (fmt, compileOutput, input, mapping) =
   case parseDocgen mapping of
-    Right mapping' -> return (PSCDocsOptions fmt input mapping')
+    Right mapping' -> return (PSCDocsOptions fmt input mapping' compileOutput)
     Left err -> do
       hPutStrLn stderr "purs docs: error in --docgen option:"
       hPutStrLn stderr ("  " ++ err)

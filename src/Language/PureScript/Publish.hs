@@ -150,20 +150,12 @@ getModules
   -> PrepareM ([D.Module], Map P.ModuleName PackageName)
 getModules paths = do
   (inputFiles, depsFiles) <- liftIO (getInputAndDepsFiles paths)
-  (modules', moduleMap) <- parseFilesInPackages inputFiles depsFiles
 
-  case runExcept (D.convertModulesInPackage (map snd modules') moduleMap) of
-    Right modules -> return (modules, moduleMap)
-    Left err -> userError (CompileError err)
+  (modules, moduleMap) <-
+    (liftIO (runExceptT (D.collectDocs "output" inputFiles depsFiles)))
+    >>= either (userError . CompileError) return
 
-  where
-  parseFilesInPackages inputFiles depsFiles = do
-    r <- liftIO . runExceptT $ D.parseFilesInPackages inputFiles depsFiles
-    case r of
-      Right r' ->
-        return r'
-      Left err ->
-        userError (CompileError err)
+  pure (map snd modules, moduleMap)
 
 data TreeStatus = Clean | Dirty deriving (Show, Eq, Ord, Enum)
 
