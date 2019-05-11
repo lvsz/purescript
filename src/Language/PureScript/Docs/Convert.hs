@@ -7,6 +7,7 @@ module Language.PureScript.Docs.Convert
   , convertTaggedModulesInPackage
   , convertModulesInPackage
   , convertModulesInPackageWithEnv
+  , insertValueTypes
   ) where
 
 import Protolude hiding (check)
@@ -14,6 +15,7 @@ import Protolude hiding (check)
 import Control.Arrow ((&&&))
 import Control.Category ((>>>))
 import Control.Monad.Writer.Strict (runWriterT)
+import Control.Monad.Supply (evalSupplyT)
 import Data.Functor (($>))
 import qualified Data.Map as Map
 import Data.String (String)
@@ -22,7 +24,17 @@ import Language.PureScript.Docs.Convert.ReExports (updateReExports)
 import Language.PureScript.Docs.Convert.Single (convertSingleModule)
 import Language.PureScript.Docs.Prim (primModules)
 import Language.PureScript.Docs.Types
-import qualified Language.PureScript as P
+
+import qualified Language.PureScript.AST as P
+import qualified Language.PureScript.Crash as P
+import qualified Language.PureScript.Errors as P
+import qualified Language.PureScript.Environment as P
+import qualified Language.PureScript.ModuleDependencies as P
+import qualified Language.PureScript.Names as P
+import qualified Language.PureScript.Parser as P
+import qualified Language.PureScript.Sugar as P
+import qualified Language.PureScript.Types as P
+import qualified Language.PureScript.TypeChecker as P
 
 import Web.Bower.PackageMeta (PackageName)
 
@@ -188,7 +200,7 @@ typeCheck ::
 typeCheck =
   (P.desugar [] >=> check)
   >>> fmap (second P.checkEnv)
-  >>> P.evalSupplyT 0
+  >>> evalSupplyT 0
   >>> ignoreWarnings
 
   where
@@ -245,7 +257,7 @@ partiallyDesugar ::
   (MonadError P.MultipleErrors m) =>
   [P.Module]
   -> m (P.Env, [P.Module])
-partiallyDesugar = P.evalSupplyT 0 . desugar'
+partiallyDesugar = evalSupplyT 0 . desugar'
   where
   desugar' =
     traverse P.desugarDoModule

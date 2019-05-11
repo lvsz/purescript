@@ -7,8 +7,10 @@ import Protolude
 import qualified Data.Map as M
 
 import Language.PureScript.Docs.Types
-import qualified Language.PureScript as P
+import qualified Language.PureScript.AST as P
 import qualified Language.PureScript.CST as CST
+import qualified Language.PureScript.Errors as P
+import qualified Language.PureScript.Names as P
 import System.IO.UTF8 (readUTF8FileT)
 import Web.Bower.PackageMeta (PackageName)
 
