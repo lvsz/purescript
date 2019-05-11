@@ -7,7 +7,7 @@ module Language.PureScript.Docs.Convert
   , convertTaggedModulesInPackage
   , convertModulesInPackage
   , convertModulesInPackageWithEnv
-  , insertValueTypes
+  , convertModule
   ) where
 
 import Protolude hiding (check)
@@ -130,6 +130,21 @@ convertModulesWithEnv withPackage =
   P.sortModules P.moduleSignature
     >>> fmap (fst >>> map P.importPrim)
     >=> convertSorted withPackage
+
+-- |
+-- Convert a single module to a Docs.Module, making use of a pre-existing
+-- type-checking environment in order to fill in any missing types. Note that
+-- re-exports will not be included.
+--
+convertModule ::
+  MonadError P.MultipleErrors m =>
+  P.Module ->
+  P.Environment ->
+  m Module
+convertModule m checkEnv =
+  partiallyDesugar [m] >>= \case
+    (_, [m']) -> pure (insertValueTypes checkEnv (convertSingleModule m'))
+    _ -> P.internalError "partiallyDesugar did not return a singleton"
 
 -- |
 -- Convert a sorted list of modules, returning both the list of converted
