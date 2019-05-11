@@ -28,6 +28,7 @@ import Language.PureScript.Docs.Types
 import qualified Language.PureScript.AST as P
 import qualified Language.PureScript.Crash as P
 import qualified Language.PureScript.Errors as P
+import qualified Language.PureScript.Externs as P
 import qualified Language.PureScript.Environment as P
 import qualified Language.PureScript.ModuleDependencies as P
 import qualified Language.PureScript.Names as P
@@ -138,11 +139,12 @@ convertModulesWithEnv withPackage =
 --
 convertModule ::
   MonadError P.MultipleErrors m =>
-  P.Module ->
+  [P.ExternsFile] ->
   P.Environment ->
+  P.Module ->
   m Module
-convertModule m checkEnv =
-  partiallyDesugar [m] >>= \case
+convertModule externs checkEnv m =
+  partiallyDesugar externs [m] >>= \case
     (_, [m']) -> pure (insertValueTypes checkEnv (convertSingleModule m'))
     _ -> P.internalError "partiallyDesugar did not return a singleton"
 
@@ -156,7 +158,7 @@ convertSorted ::
   [P.Module] ->
   m ([Module], P.Env)
 convertSorted withPackage modules = do
-  (env, convertedModules) <- second (map convertSingleModule) <$> partiallyDesugar modules
+  (env, convertedModules) <- second (map convertSingleModule) <$> partiallyDesugar [] modules
 
   modulesWithTypes <- typeCheckIfNecessary modules convertedModules
 
@@ -270,9 +272,10 @@ runParser p s = either (Left . show) Right $ do
 --
 partiallyDesugar ::
   (MonadError P.MultipleErrors m) =>
-  [P.Module]
-  -> m (P.Env, [P.Module])
-partiallyDesugar = evalSupplyT 0 . desugar'
+  [P.ExternsFile] ->
+  [P.Module] ->
+  m (P.Env, [P.Module])
+partiallyDesugar externs = evalSupplyT 0 . desugar'
   where
   desugar' =
     traverse P.desugarDoModule
@@ -280,8 +283,8 @@ partiallyDesugar = evalSupplyT 0 . desugar'
       >=> map P.desugarLetPatternModule
       >>> traverse P.desugarCasesModule
       >=> traverse P.desugarTypeDeclarationsModule
-      >=> ignoreWarnings . P.desugarImportsWithEnv []
-      >=> traverse (P.rebracketFiltered isInstanceDecl [])
+      >=> ignoreWarnings . P.desugarImportsWithEnv externs
+      >=> traverse (P.rebracketFiltered isInstanceDecl externs)
 
   ignoreWarnings = fmap fst . runWriterT
 
