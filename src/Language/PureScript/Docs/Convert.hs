@@ -87,19 +87,11 @@ convertModulesInPackage ::
   Map P.ModuleName PackageName ->
   m [Module]
 convertModulesInPackage modules modulesDeps =
-  fmap fst (convertModulesInPackageWithEnv modules modulesDeps)
-
-convertModulesInPackageWithEnv ::
-  (MonadError P.MultipleErrors m) =>
-  [P.Module] ->
-  Map P.ModuleName PackageName ->
-  m ([Module], P.Env)
-convertModulesInPackageWithEnv modules modulesDeps =
   go modules
   where
   go =
-     convertModulesWithEnv withPackage
-     >>> fmap (first (filter (shouldKeep . modName)))
+     convertModules withPackage
+     >>> fmap (filter (shouldKeep . modName))
 
   shouldKeep mn = isLocal mn && not (P.isBuiltinModuleName mn)
 
@@ -112,12 +104,12 @@ convertModulesInPackageWithEnv modules modulesDeps =
   isLocal :: P.ModuleName -> Bool
   isLocal = not . flip Map.member modulesDeps
 
-convertModulesWithEnv ::
+convertModules ::
   (MonadError P.MultipleErrors m) =>
   (P.ModuleName -> InPackage P.ModuleName) ->
   [P.Module] ->
-  m ([Module], P.Env)
-convertModulesWithEnv withPackage =
+  m [Module]
+convertModules withPackage =
   P.sortModules P.moduleSignature
     >>> fmap (fst >>> map P.importPrim)
     >=> convertSorted withPackage
@@ -146,7 +138,7 @@ convertSorted ::
   (MonadError P.MultipleErrors m) =>
   (P.ModuleName -> InPackage P.ModuleName) ->
   [P.Module] ->
-  m ([Module], P.Env)
+  m [Module]
 convertSorted withPackage modules = do
   (env, convertedModules) <- second (map convertSingleModule) <$> partiallyDesugar [] modules
 
@@ -169,7 +161,7 @@ convertSorted withPackage modules = do
   let primModuleNames = Map.keys P.primEnv
   let traversalOrder = primModuleNames ++ map P.getModuleName modules
   let withReExports = updateReExports env traversalOrder withPackage moduleMap
-  pure (Map.elems withReExports, env)
+  pure (Map.elems withReExports)
 
 -- |
 -- If any exported value declarations have either wildcard type signatures, or
