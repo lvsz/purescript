@@ -3,10 +3,8 @@
 
 module Language.PureScript.Docs.Convert
   ( convertModules
-  , convertModulesWithEnv
   , convertTaggedModulesInPackage
   , convertModulesInPackage
-  , convertModulesInPackageWithEnv
   , convertModule
   ) where
 
