@@ -39,7 +39,7 @@ import qualified Language.PureScript.CoreFn as CF
 import qualified Language.PureScript.CoreFn.ToJSON as CFJ
 import qualified Language.PureScript.CoreImp.AST as Imp
 import           Language.PureScript.Crash
-import qualified Language.PureScript.Docs as Docs
+import qualified Language.PureScript.Docs.Types as Docs
 import           Language.PureScript.Errors
 import           Language.PureScript.Make.Monad
 import           Language.PureScript.Names

@@ -22,6 +22,7 @@ import Language.PureScript.Docs.Types
 
 import qualified Language.PureScript.AST as P
 import qualified Language.PureScript.Crash as P
+import qualified Language.PureScript.Errors as P
 import qualified Language.PureScript.Externs as P
 import qualified Language.PureScript.ModuleDependencies as P
 import qualified Language.PureScript.Names as P
@@ -69,7 +70,9 @@ updateReExports externs withPackage = execState action
   traversalOrder =
     case P.sortModules externsSignature externs of
       Right (es, _) -> map P.efModuleName es
-      Left errs -> internalError "failed to sortModules"
+      Left errs -> internalError $
+        "failed to sortModules: " ++
+        P.prettyPrintMultipleErrors P.defaultPPEOptions errs
 
   externsSignature :: P.ExternsFile -> P.ModuleSignature
   externsSignature ef =

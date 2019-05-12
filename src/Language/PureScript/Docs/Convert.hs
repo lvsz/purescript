@@ -2,28 +2,19 @@
 -- from Language.PureScript.Docs.
 
 module Language.PureScript.Docs.Convert
-  ( collectDocs
-  , convertModule
+  ( convertModule
   ) where
 
 import Protolude hiding (check)
 
-import Control.Arrow ((&&&))
 import Control.Category ((>>>))
 import Control.Monad.Writer.Strict (runWriterT)
 import Control.Monad.Supply (evalSupplyT)
-import qualified Data.Aeson.BetterErrors as ABE
-import qualified Data.ByteString as BS
 import Data.Functor (($>))
 import qualified Data.Map as Map
 import Data.String (String)
-import qualified Data.Text as T
-import System.FilePath ((</>))
 
-import Language.PureScript.Docs.ParseInPackage (parseFilesInPackages)
-import Language.PureScript.Docs.Convert.ReExports (updateReExports)
 import Language.PureScript.Docs.Convert.Single (convertSingleModule)
-import Language.PureScript.Docs.Prim (primModules)
 import Language.PureScript.Docs.Types
 
 import qualified Language.PureScript.AST as P
@@ -36,125 +27,8 @@ import qualified Language.PureScript.Parser as P
 import qualified Language.PureScript.Sugar as P
 import qualified Language.PureScript.Types as P
 
-import Web.Bower.PackageMeta (PackageName)
 
 import Text.Parsec (eof)
-
--- |
--- Given a compiler output directory, a list of input PureScript source files,
--- and a list of dependency PureScript source files, produce documentation for
--- the input files in the intermediate documentation format. Note that
--- dependency files are not included in the result.
---
--- The output directory must be up to date with respect to the provided input
--- and dependency files, and the files must have been built with the docs
--- codegen target, i.e. --codegen docs.
---
-collectDocs ::
-  forall m.
-  (MonadError P.MultipleErrors m, MonadIO m) =>
-  FilePath ->
-  [FilePath] ->
-  [(PackageName, FilePath)] ->
-  m ([(FilePath, Module)], Map P.ModuleName PackageName)
-collectDocs outputDir inputFiles depsFiles = do
-  (parsedModules, modulesDeps) <- parseFilesInPackages inputFiles depsFiles
-
-  -- TODO Check that the outputDir is up to date relative to the input files
-  externs <- getExterns outputDir (map (P.getModuleName . snd) parsedModules)
-
-  let (withPackage, shouldKeep) =
-        packageDiscriminators modulesDeps
-  let go =
-        operateAndRetag P.getModuleName modName $ \ms -> do
-          docsModules <- traverse (liftIO . parseDocsJsonFile outputDir . P.getModuleName) ms
-          addReExports withPackage docsModules externs
-
-  docsModules <- go parsedModules
-
-  pure ((filter (shouldKeep . modName . snd) docsModules), modulesDeps)
-
-  where
-  -- TODO implement
-  getExterns _ _ = return []
-
-  packageDiscriminators modulesDeps =
-    let
-      shouldKeep mn = isLocal mn && not (P.isBuiltinModuleName mn)
-
-      withPackage :: P.ModuleName -> InPackage P.ModuleName
-      withPackage mn =
-        case Map.lookup mn modulesDeps of
-          Just pkgName -> FromDep pkgName mn
-          Nothing -> Local mn
-
-      isLocal :: P.ModuleName -> Bool
-      isLocal = not . flip Map.member modulesDeps
-    in
-      (withPackage, shouldKeep)
-
-parseDocsJsonFile :: FilePath -> P.ModuleName -> IO Module
-parseDocsJsonFile outputDir mn =
-  let
-    filePath = outputDir </> T.unpack (P.runModuleName mn) </> "docs.json"
-  in do
-    str <- BS.readFile filePath
-    case ABE.parseStrict asModule str of
-      Right m -> pure m
-      Left err -> P.internalError $
-        "Failed to decode: " ++ filePath ++
-        intercalate "\n" (map T.unpack (ABE.displayError displayPackageError err))
-
-addReExports ::
-  (MonadError P.MultipleErrors m) =>
-  (P.ModuleName -> InPackage P.ModuleName) ->
-  [Module] ->
-  [P.ExternsFile] ->
-  m [Module]
-addReExports withPackage docsModules externs = do
-  -- We add the Prim docs modules here, so that docs generation is still
-  -- possible if the modules we are generating docs for re-export things from
-  -- Prim submodules. Note that the Prim modules do not exist as
-  -- @Language.PureScript.Module@ values because they do not contain anything
-  -- that exists at runtime. However, we have pre-constructed
-  -- @Language.PureScript.Docs.Types.Module@ values for them, which we use
-  -- here.
-  let moduleMap =
-        Map.fromList
-          (map (modName &&& identity)
-               (docsModules ++ primModules))
-
-  let withReExports = updateReExports externs withPackage moduleMap
-  pure (Map.elems withReExports)
-
--- |
--- Perform an operation on a list of things which are tagged, and reassociate
--- the things with their tags afterwards.
---
-operateAndRetag ::
-  forall m a b key tag.
-  Monad m =>
-  Ord key =>
-  Show key =>
-  (a -> key) ->
-  (b -> key) ->
-  ([a] -> m [b]) ->
-  [(tag, a)] ->
-  m [(tag, b)]
-operateAndRetag keyA keyB operation input =
-  fmap (map retag) $ operation (map snd input)
-  where
-  tags :: Map key tag
-  tags = Map.fromList $ map (\(tag, a) -> (keyA a, tag)) input
-
-  findTag :: key -> tag
-  findTag key =
-    case Map.lookup key tags of
-      Just tag -> tag
-      Nothing -> P.internalError ("Missing tag for: " ++ show key)
-
-  retag :: b -> (tag, b)
-  retag b = (findTag (keyB b), b)
 
 -- |
 -- Convert a single module to a Docs.Module, making use of a pre-existing

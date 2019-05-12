@@ -29,7 +29,7 @@ import qualified Data.Text as T
 import           Language.PureScript.AST
 import           Language.PureScript.Crash
 import qualified Language.PureScript.CST as CST
-import qualified Language.PureScript.Docs as Docs
+import qualified Language.PureScript.Docs.Convert as Docs
 import           Language.PureScript.Environment
 import           Language.PureScript.Errors
 import           Language.PureScript.Externs
