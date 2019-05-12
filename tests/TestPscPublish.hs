@@ -89,7 +89,9 @@ testRunOptions = defaultPublishOptions
 -- | attempt to parse it again, and ensure that it doesn't change.
 testPackage :: FilePath -> FilePath -> Expectation
 testPackage dir resolutionsFile = do
-  res <- pushd dir (preparePackage "bower.json" resolutionsFile testRunOptions)
+  res <- pushd dir $ do
+    compileForPublish
+    preparePackage "bower.json" resolutionsFile testRunOptions
   case res of
     Left err ->
       expectationFailure $
@@ -103,3 +105,14 @@ testPackage dir resolutionsFile = do
           expectationFailure ("Failed to re-parse: " ++ msg)
         Mismatch _ _ ->
           expectationFailure "JSON did not match"
+
+compileForPublish :: IO ()
+compileForPublish = do
+  inputFiles <- glob ... -- TODO: should match with resolutions.json. hmmm
+  P.runMake P.defaultOptions $ do
+    fs <- liftIO $ readInput inputFiles
+    ms <- CST.parseFromFiles id fs
+    foreigns <- inferForeignModules ms
+    liftIO (check (map snd ms))
+    let actions = P.buildMakeActions "output"
+    P.make actions (CST.pureResult <$> supportModules ++ map snd ms)

@@ -31,7 +31,6 @@ import qualified Language.PureScript.Crash as P
 import qualified Language.PureScript.Errors as P
 import qualified Language.PureScript.Externs as P
 import qualified Language.PureScript.Environment as P
-import qualified Language.PureScript.ModuleDependencies as P
 import qualified Language.PureScript.Names as P
 import qualified Language.PureScript.Parser as P
 import qualified Language.PureScript.Sugar as P
@@ -59,27 +58,26 @@ collectDocs ::
   [(PackageName, FilePath)] ->
   m ([(FilePath, Module)], Map P.ModuleName PackageName)
 collectDocs outputDir inputFiles depsFiles = do
-  -- TODO Check that the outputDir is up to date relative to the input files
-
   (parsedModules, modulesDeps) <- parseFilesInPackages inputFiles depsFiles
 
-  -- This is only necessary because we need to get hold of an Env for adding
-  -- re-exports. Hopefully we will soon be able to use externs to achieve this
-  -- instead.
-  env <- getEnvFromModules (map snd parsedModules)
+  -- TODO Check that the outputDir is up to date relative to the input files
+  externs <- getExterns outputDir (map (P.getModuleName . snd) parsedModules)
 
   let (withPackage, shouldKeep) =
         packageDiscriminators modulesDeps
   let go =
         operateAndRetag P.getModuleName modName $ \ms -> do
           docsModules <- traverse (liftIO . parseDocsJsonFile outputDir . P.getModuleName) ms
-          addReExports withPackage docsModules env
+          addReExports withPackage docsModules externs
 
   docsModules <- go parsedModules
 
   pure ((filter (shouldKeep . modName . snd) docsModules), modulesDeps)
 
   where
+  -- TODO implement
+  getExterns _ _ = return []
+
   packageDiscriminators modulesDeps =
     let
       shouldKeep mn = isLocal mn && not (P.isBuiltinModuleName mn)
@@ -94,13 +92,6 @@ collectDocs outputDir inputFiles depsFiles = do
       isLocal = not . flip Map.member modulesDeps
     in
       (withPackage, shouldKeep)
-
-  getEnvFromModules :: [P.Module] -> m P.Env
-  getEnvFromModules =
-    P.sortModules P.moduleSignature
-      >>> fmap (fst >>> map P.importPrim)
-      >=> partiallyDesugar []
-      >>> fmap fst
 
 parseDocsJsonFile :: FilePath -> P.ModuleName -> IO Module
 parseDocsJsonFile outputDir mn =
@@ -118,9 +109,9 @@ addReExports ::
   (MonadError P.MultipleErrors m) =>
   (P.ModuleName -> InPackage P.ModuleName) ->
   [Module] ->
-  P.Env ->
+  [P.ExternsFile] ->
   m [Module]
-addReExports withPackage docsModules env = do
+addReExports withPackage docsModules externs = do
   -- We add the Prim docs modules here, so that docs generation is still
   -- possible if the modules we are generating docs for re-export things from
   -- Prim submodules. Note that the Prim modules do not exist as
@@ -133,11 +124,7 @@ addReExports withPackage docsModules env = do
           (map (modName &&& identity)
                (docsModules ++ primModules))
 
-  -- Set up the traversal order for re-export handling so that Prim modules
-  -- come first.
-  let primModuleNames = Map.keys P.primEnv
-  let traversalOrder = primModuleNames ++ map modName docsModules
-  let withReExports = updateReExports env traversalOrder withPackage moduleMap
+  let withReExports = updateReExports externs withPackage moduleMap
   pure (Map.elems withReExports)
 
 -- |

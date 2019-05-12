@@ -57,6 +57,9 @@ data PublishOptions = PublishOptions
   , publishGetTagTime :: Text -> PrepareM UTCTime
   , -- | What to do when the working tree is dirty
     publishWorkingTreeDirty :: PrepareM ()
+  , -- | Compiler output directory (which must include up-to-date docs.json
+    -- files for any modules we are producing docs for).
+    publishCompileOutputDir :: FilePath
   }
 
 defaultPublishOptions :: PublishOptions
@@ -64,6 +67,7 @@ defaultPublishOptions = PublishOptions
   { publishGetVersion = getVersionFromGitTag
   , publishGetTagTime = getTagTime
   , publishWorkingTreeDirty = userError DirtyWorkingTree
+  , publishCompileOutputDir = "output"
   }
 
 -- | Attempt to retrieve package metadata from the current directory.
@@ -132,7 +136,7 @@ preparePackage' manifestFile resolutionsFile opts = do
 
   resolvedDeps <- parseResolutionsFile resolutionsFile
 
-  (pkgModules, pkgModuleMap)  <- getModules (map (second fst) resolvedDeps)
+  (pkgModules, pkgModuleMap)  <- getModules opts (map (second fst) resolvedDeps)
 
   let declaredDeps = map fst $
                        Bower.bowerDependencies pkgMeta
@@ -146,13 +150,14 @@ preparePackage' manifestFile resolutionsFile opts = do
   return D.Package{..}
 
 getModules
-  :: [(PackageName, FilePath)]
+  :: PublishOptions
+  -> [(PackageName, FilePath)]
   -> PrepareM ([D.Module], Map P.ModuleName PackageName)
-getModules paths = do
+getModules opts paths = do
   (inputFiles, depsFiles) <- liftIO (getInputAndDepsFiles paths)
 
   (modules, moduleMap) <-
-    (liftIO (runExceptT (D.collectDocs "output" inputFiles depsFiles)))
+    (liftIO (runExceptT (D.collectDocs (publishCompileOutputDir opts) inputFiles depsFiles)))
     >>= either (userError . CompileError) return
 
   pure (map snd modules, moduleMap)
