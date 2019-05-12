@@ -10,19 +10,27 @@ import Control.Monad.IO.Class (liftIO)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Aeson as A
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Version
 import Data.Foldable (forM_)
 import qualified Text.PrettyPrint.Boxes as Boxes
 import System.Directory (listDirectory)
 import System.FilePath ((</>))
+import System.FilePath.Glob (glob)
 
 import Language.PureScript.Docs
 import Language.PureScript.Publish
 import Language.PureScript.Publish.ErrorsWarnings as Publish
 
+import qualified Language.PureScript.CST as CST
+import Language.PureScript.Errors
+import Language.PureScript.Make (runMake, make, inferForeignModules, buildMakeActions)
+import Language.PureScript.Options (Options(..), defaultOptions, CodegenTarget(..))
+
 import Test.Tasty
 import Test.Tasty.Hspec (Spec, Expectation, runIO, context, it, expectationFailure, testSpec)
-import TestUtils
+import TestUtils hiding (inferForeignModules, makeActions)
 
 main :: IO TestTree
 main = testSpec "publish" spec
@@ -33,16 +41,19 @@ spec = do
     it "purescript-prelude" $ do
       testPackage
         "tests/support/bower_components/purescript-prelude"
+        Nothing
         "../../prelude-resolutions.json"
 
     it "basic example" $ do
       testPackage
         "tests/purs/publish/basic-example"
+        (Just "../../../support/bower_components/")
         "resolutions.json"
 
     it "basic example with legacy resolutions file" $ do
       testPackage
         "tests/purs/publish/basic-example"
+        (Just "../../../support/bower_components/")
         "resolutions-legacy.json"
 
   context "json compatibility" $ do
@@ -87,15 +98,15 @@ testRunOptions = defaultPublishOptions
 
 -- | Given a directory which contains a package, produce JSON from it, and then
 -- | attempt to parse it again, and ensure that it doesn't change.
-testPackage :: FilePath -> FilePath -> Expectation
-testPackage dir resolutionsFile = do
-  res <- pushd dir $ do
-    compileForPublish
+testPackage :: FilePath -> Maybe FilePath -> FilePath -> Expectation
+testPackage packageDir dependenciesDir resolutionsFile = do
+  res <- pushd packageDir $ do
+    compileForPublish dependenciesDir
     preparePackage "bower.json" resolutionsFile testRunOptions
   case res of
     Left err ->
       expectationFailure $
-        "Failed to produce JSON from " ++ dir ++ ":\n" ++
+        "Failed to produce JSON from " ++ packageDir ++ ":\n" ++
         Boxes.render (Publish.renderError err)
     Right package ->
       case roundTrip package of
@@ -106,13 +117,31 @@ testPackage dir resolutionsFile = do
         Mismatch _ _ ->
           expectationFailure "JSON did not match"
 
-compileForPublish :: IO ()
-compileForPublish = do
-  inputFiles <- glob ... -- TODO: should match with resolutions.json. hmmm
-  P.runMake P.defaultOptions $ do
-    fs <- liftIO $ readInput inputFiles
-    ms <- CST.parseFromFiles id fs
-    foreigns <- inferForeignModules ms
-    liftIO (check (map snd ms))
-    let actions = P.buildMakeActions "output"
-    P.make actions (CST.pureResult <$> supportModules ++ map snd ms)
+compileForPublish :: Maybe FilePath -> IO ()
+compileForPublish dependenciesDir = do
+  inputFiles <-
+    fmap concat $ traverse glob $
+      [ "src/**/*.purs" ] ++
+      case dependenciesDir of
+        Just dir ->
+          [ dir </> "*/src/**/*.purs" ]
+        Nothing ->
+          []
+
+  moduleFiles <- readInput inputFiles
+  (makeErrors, _) <- runMake testOptions $ do
+    ms <- CST.parseModulesFromFiles id moduleFiles
+    let filePathMap = Map.fromList $ map (\(fp, pm) -> (getModuleName $ CST.resPartial pm, Right fp)) ms
+    foreigns <- inferForeignModules filePathMap
+    let makeActions = buildMakeActions "output" filePathMap foreigns False
+    make makeActions (map snd ms)
+
+  case makeErrors of
+    Left errs ->
+      expectationFailure $
+        prettyPrintMultipleErrors defaultPPEOptions errs
+    Right _ ->
+      return ()
+
+testOptions :: Options
+testOptions = defaultOptions { optionsCodegenTargets = Set.singleton Docs }

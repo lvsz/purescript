@@ -22,7 +22,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time.Clock (getCurrentTime)
 import Data.Version (Version(..))
-import System.Exit
+import qualified Text.PrettyPrint.Boxes as Boxes
 
 import qualified Language.PureScript as P
 import qualified Language.PureScript.Docs as Docs
@@ -33,6 +33,7 @@ import qualified Language.PureScript.Publish.ErrorsWarnings as Publish
 import Web.Bower.PackageMeta (parsePackageName, runPackageName)
 
 import TestUtils
+import TestPscPublish (compileForPublish)
 
 import Test.Tasty
 import Test.Tasty.Hspec (Spec, it, context, expectationFailure, runIO, testSpec)
@@ -47,7 +48,8 @@ publishOpts = Publish.defaultPublishOptions
 
 getPackage :: IO (Either Publish.PackageError (Docs.Package Docs.NotYetKnown))
 getPackage =
-  pushd "tests/purs/docs" $
+  pushd "tests/purs/docs" $ do
+    compileForPublish (Just "bower_components")
     Publish.preparePackage "bower.json" "resolutions.json" publishOpts
 
 main :: IO TestTree
@@ -55,14 +57,17 @@ main = testSpec "docs" spec
 
 spec :: Spec
 spec = do
-  pkg@Docs.Package{..} <- runIO $ do
-    res <- getPackage
-    case res of
-      Left e ->
-        Publish.printErrorToStdout e >> exitFailure
-      Right p ->
-        pure p
+  packageResult <- runIO getPackage
 
+  case packageResult of
+    Left e ->
+      it "failed to produce docs" $ do
+        expectationFailure (Boxes.render (Publish.renderError e))
+    Right pkg ->
+      mkSpec pkg
+
+mkSpec :: Docs.Package Docs.NotYetKnown -> Spec
+mkSpec pkg@Docs.Package{..} = do
   let linksCtx = Docs.getLinksContext pkg
 
   context "Language.PureScript.Docs" $ do
