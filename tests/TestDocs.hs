@@ -653,6 +653,11 @@ testCases =
       [ ValueShouldHaveTypeSignature (n "Ado") "test" (renderedType "Int")
       ]
     )
+
+  , ("TypeSynonymInstance",
+      [ ShouldBeDocumented (n "TypeSynonymInstance") "MyNT" ["MyNT", "ntMyNT"]
+      ]
+    )
   ]
 
   where
