@@ -1058,7 +1058,7 @@ prettyPrintSingleError (PPEOptions codeColor full level showDocs relPath) e = fl
             ]
     renderSimpleErrorMessage NeedToBuildDocs =
       paras
-        [ line "Some of the input modules are missing up-to-date documentation data in the compiler output directory. Please compile all of the relevant modules using `purs compile` with the `docs' codegen target."
+        [ line "Some of the input modules are missing up-to-date documentation data in the compiler output directory. Please compile all of the relevant modules using `purs compile' with the `docs' codegen target."
         , line "For example:"
         , indent $ line "$ purs compile --codegen js,docs SOURCE_FILES"
         ]

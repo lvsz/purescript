@@ -1,6 +1,6 @@
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module TestPscPublish where
 
@@ -101,7 +101,12 @@ testRunOptions = defaultPublishOptions
 testPackage :: FilePath -> Maybe FilePath -> FilePath -> Expectation
 testPackage packageDir dependenciesDir resolutionsFile = do
   res <- pushd packageDir $ do
-    compileForPublish dependenciesDir
+    compileForPublish dependenciesDir >>= \case
+      Left errs ->
+        expectationFailure $
+          prettyPrintMultipleErrors defaultPPEOptions errs
+      Right _ ->
+        pure ()
     preparePackage "bower.json" resolutionsFile testRunOptions
   case res of
     Left err ->
@@ -117,7 +122,7 @@ testPackage packageDir dependenciesDir resolutionsFile = do
         Mismatch _ _ ->
           expectationFailure "JSON did not match"
 
-compileForPublish :: Maybe FilePath -> IO ()
+compileForPublish :: Maybe FilePath -> IO (Either MultipleErrors ())
 compileForPublish dependenciesDir = do
   inputFiles <-
     fmap concat $ traverse glob $
@@ -127,21 +132,13 @@ compileForPublish dependenciesDir = do
           [ dir </> "*/src/**/*.purs" ]
         Nothing ->
           []
-
   moduleFiles <- readInput inputFiles
-  (makeErrors, _) <- runMake testOptions $ do
+  fmap fst $ runMake testOptions $ do
     ms <- CST.parseModulesFromFiles id moduleFiles
     let filePathMap = Map.fromList $ map (\(fp, pm) -> (getModuleName $ CST.resPartial pm, Right fp)) ms
     foreigns <- inferForeignModules filePathMap
     let makeActions = buildMakeActions "output" filePathMap foreigns False
-    make makeActions (map snd ms)
-
-  case makeErrors of
-    Left errs ->
-      expectationFailure $
-        prettyPrintMultipleErrors defaultPPEOptions errs
-    Right _ ->
-      return ()
+    void (make makeActions (map snd ms))
 
 testOptions :: Options
 testOptions = defaultOptions { optionsCodegenTargets = Set.singleton Docs }
