@@ -6,6 +6,7 @@ module Language.PureScript.Docs.Collect
 import Protolude hiding (check)
 
 import Control.Arrow ((&&&))
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import qualified Data.Aeson.BetterErrors as ABE
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -99,31 +100,9 @@ getExterns outputDir modules = do
 
     for modules $ \(_, m) -> do
       let mn = P.getModuleName m
-      outTime <-
-        P.getOutputTimestamp actions mn >>= \case
-          Just t ->
-            pure t
-          Nothing ->
-            throwError undefined -- NeedToBuildWithDocs
-      inTime <-
-        P.getInputTimestamp actions mn >>= \case
-          Right Nothing ->
-            throwError undefined -- NeedToBuildWithDocs
-          Right (Just t) ->
-            pure t
-          Left _ ->
-            P.internalError $
-              "Unexpected Left in getInputTimestamp: "
-              ++ T.unpack (P.runModuleName mn)
-
-      when (inTime > outTime)
-        (throwError undefined) -- NeedToBuildWithDocs
-
-      (_, externsBS) <- P.readExterns actions mn
-
-      case P.decodeExterns externsBS of
+      runMaybeT (getExternsForModule actions mn) >>= \case
         Just externs -> pure externs
-        Nothing -> throwError undefined -- NeedToBuildWithDocs
+        Nothing -> throwError (P.errorMessage P.NeedToBuildDocs)
 
   either throwError pure result
 
@@ -131,6 +110,25 @@ getExterns outputDir modules = do
   -- We only need to make sure that externs.json and docs.json are up to date;
   -- we don't need to care about other files.
   docsOptions = P.defaultOptions { P.optionsCodegenTargets = Set.singleton P.Docs }
+
+  -- A return value of Nothing indicates that we have out of date or missing
+  -- information in the compiler output directory.
+  getExternsForModule actions mn = do
+    outTime <-
+      MaybeT $ P.getOutputTimestamp actions mn
+
+    inTime <-
+      MaybeT $ P.getInputTimestamp actions mn >>= \case
+        Right t ->
+          pure t
+        Left _ ->
+          P.internalError $
+            "Unexpected Left in getInputTimestamp: "
+            ++ T.unpack (P.runModuleName mn)
+
+    guard (inTime <= outTime)
+
+    MaybeT $ fmap (P.decodeExterns . snd) (P.readExterns actions mn)
 
 parseDocsJsonFile :: FilePath -> P.ModuleName -> IO Module
 parseDocsJsonFile outputDir mn =
