@@ -139,7 +139,8 @@ compileForPublish dependenciesDir = do
     let filePathMap = Map.fromList $ map (\(_, pm) -> (getModuleName $ CST.resPartial pm, Left RebuildAlways)) ms
     foreigns <- inferForeignModules filePathMap
     let makeActions = buildMakeActions "output" filePathMap foreigns False
-    void (make makeActions (map snd ms))
+    make makeActions (map snd ms)
+    pure ()
 
 testOptions :: Options
 testOptions = defaultOptions { optionsCodegenTargets = Set.singleton Docs }

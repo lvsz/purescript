@@ -6,6 +6,6 @@ import TypeSynonym (MyInt)
 
 newtype MyNT = MyNT MyInt
 
-derive instance ntMyInt :: Newtype MyNT _
+derive instance ntMyNT :: Newtype MyNT _
 
 foo = 0

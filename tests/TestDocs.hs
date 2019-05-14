@@ -11,6 +11,7 @@ import Prelude.Compat
 
 import Control.Arrow (first)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, withExceptT)
 
 import Data.List (findIndex)
 import Data.Foldable
@@ -48,9 +49,11 @@ publishOpts = Publish.defaultPublishOptions
 
 getPackage :: IO (Either Publish.PackageError (Docs.Package Docs.NotYetKnown))
 getPackage =
-  pushd "tests/purs/docs" $ do
-    compileForPublish (Just "bower_components")
-    Publish.preparePackage "bower.json" "resolutions.json" publishOpts
+  pushd "tests/purs/docs" $ runExceptT $ do
+    withExceptT (Publish.UserError . Publish.CompileError) $ ExceptT $
+      compileForPublish (Just "bower_components")
+    ExceptT $
+      Publish.preparePackage "bower.json" "resolutions.json" publishOpts
 
 main :: IO TestTree
 main = testSpec "docs" spec
