@@ -6,6 +6,7 @@ module TestPscPublish where
 
 import Prelude
 
+import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (getCurrentTime)
@@ -25,7 +26,7 @@ import Language.PureScript.Publish.ErrorsWarnings as Publish
 
 import qualified Language.PureScript.CST as CST
 import Language.PureScript.Errors
-import Language.PureScript.Make (runMake, make, inferForeignModules, buildMakeActions)
+import Language.PureScript.Make (runMake, make, inferForeignModules, buildMakeActions, RebuildPolicy(..))
 import Language.PureScript.Options (Options(..), defaultOptions, CodegenTarget(..))
 
 import Test.Tasty
@@ -135,7 +136,7 @@ compileForPublish dependenciesDir = do
   moduleFiles <- readInput inputFiles
   fmap fst $ runMake testOptions $ do
     ms <- CST.parseModulesFromFiles id moduleFiles
-    let filePathMap = Map.fromList $ map (\(fp, pm) -> (getModuleName $ CST.resPartial pm, Right fp)) ms
+    let filePathMap = Map.fromList $ map (\(_, pm) -> (getModuleName $ CST.resPartial pm, Left RebuildAlways)) ms
     foreigns <- inferForeignModules filePathMap
     let makeActions = buildMakeActions "output" filePathMap foreigns False
     void (make makeActions (map snd ms))
