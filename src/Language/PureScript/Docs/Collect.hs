@@ -47,15 +47,17 @@ collectDocs ::
   [(PackageName, FilePath)] ->
   m ([(FilePath, Module)], Map P.ModuleName PackageName)
 collectDocs outputDir inputFiles depsFiles = do
-  (parsedModules, modulesDeps) <- parseFilesInPackages inputFiles depsFiles
+  -- TODO: only need to partially parse here
+  (parsedModules', modulesDeps) <- parseFilesInPackages inputFiles depsFiles
+  let parsedModules = map (second P.getModuleName) parsedModules'
 
   externs <- getExterns outputDir parsedModules
 
   let (withPackage, shouldKeep) =
         packageDiscriminators modulesDeps
   let go =
-        operateAndRetag P.getModuleName modName $ \ms -> do
-          docsModules <- traverse (liftIO . parseDocsJsonFile outputDir . P.getModuleName) ms
+        operateAndRetag identity modName $ \ms -> do
+          docsModules <- traverse (liftIO . parseDocsJsonFile outputDir) ms
           addReExports withPackage docsModules externs
 
   docsModules <- go parsedModules
@@ -90,16 +92,15 @@ getExterns ::
   forall m.
   (MonadError P.MultipleErrors m, MonadIO m) =>
   FilePath ->
-  [(FilePath, P.Module)] ->
+  [(FilePath, P.ModuleName)] ->
   m [P.ExternsFile]
 getExterns outputDir modules = do
   (result, _) <- liftIO $ P.runMake docsOptions $ do
-    let filePathMap = Map.fromList $ map (\(fp, m) -> (P.getModuleName m, Right fp)) modules
+    let filePathMap = Map.fromList $ map (\(fp, mn) -> (mn, Right fp)) modules
     foreigns <- P.inferForeignModules filePathMap
     let actions = P.buildMakeActions outputDir filePathMap foreigns False
 
-    for modules $ \(_, m) -> do
-      let mn = P.getModuleName m
+    for modules $ \(_, mn) -> do
       runMaybeT (getExternsForModule actions mn) >>= \case
         Just externs -> pure externs
         Nothing -> throwError (P.errorMessage P.NeedToBuildDocs)
