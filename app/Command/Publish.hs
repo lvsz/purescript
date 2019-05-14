@@ -29,6 +29,8 @@ dryRun = Opts.switch $
      Opts.long "dry-run"
   <> Opts.help "Produce no output, and don't require a tagged version to be checked out."
 
+-- TODO: output dir
+
 dryRunOptions :: PublishOptions
 dryRunOptions = defaultPublishOptions
   { publishGetVersion = return dummyVersion
