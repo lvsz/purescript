@@ -37,13 +37,6 @@ import Data.Monoid (Monoid(..))
 
 import Control.Monad.Writer
 
-class ( MonadReader Options m
-      , MonadIO m
-      , MonadBase IO m
-      , MonadBaseControl IO m
-      ) => MonadMakeBase m where
-    makeIOBase :: (IOError -> ErrorMessage) -> IO a -> m a
-
 class ( Monad m
       , MonadReader Options m
       , MonadWriter MultipleErrors m
@@ -54,25 +47,9 @@ class ( Monad m
       ) => MonadMake m where
     makeIO :: (IOError -> ErrorMessage) -> IO a -> m a
 
--- makeImpIO :: IORef Options -> IORef MultipleErrors -> MonadMake.Dict IO
--- ioRefMakeBase :: IORef Options -> MonadMakeBase.Dict IO
--- ioRefMakeBase opts = MonadMakeBase.Dict
---     { parent1 = ioRefReader opts
---     , parent2 = getDict @(MonadIO IO)
---     , parent3 = getDict @(MonadBase IO IO)
---     , parent4 = getDict @(MonadBaseControl IO IO)
---     , makeIOBase = \f io -> do
---         e <- liftIO $ tryIOError io
---         either (undefined . singleError . f) return e
---     }
-
---newtype Make a = Make
-  --{ unMake :: ExceptT MultipleErrors (ReaderT Options (Logger MultipleErrors)) a
-  --} deriving (Functor, Applicative, Monad, MonadIO, MonadError MultipleErrors, MonadWriter MultipleErrors, MonadReader Options)
--- runIORefMakeBase :: forall m. MonadMakeBase m => IORef Options -> 
 newtype MakeIO a = MakeIO
-  { unMakeIO :: ExceptT MultipleErrors (LoggerT MultipleErrors IO) a
-  } deriving ( Functor, Applicative, Monad, MonadIO, MonadError MultipleErrors, MonadWriter MultipleErrors)
+  { unMakeIO :: ExceptT MultipleErrors IO a
+  } deriving ( Functor, Applicative, Monad, MonadIO, MonadError MultipleErrors)
 
 instance MonadBase IO MakeIO where
   liftBase = liftIO
@@ -83,11 +60,11 @@ instance MonadBaseControl IO MakeIO where
   restoreM = MakeIO . restoreM
 
 
-ioRefMake :: IORef Options -> MonadMake.Dict MakeIO
-ioRefMake opts = MonadMake.Dict
+ioRefMake :: IORef Options -> IORef MultipleErrors -> MonadMake.Dict MakeIO
+ioRefMake opts errs = MonadMake.Dict
     { parent1 = getDict @(Monad MakeIO)
     , parent2 = ioRefReader opts
-    , parent3 = getDict @(MonadWriter MultipleErrors MakeIO)
+    , parent3 = ioRefErrorLogger errs
     , parent4 = getDict @(MonadError MultipleErrors MakeIO)
     , parent5 = getDict @(MonadIO MakeIO)
     , parent6 = getDict @(MonadBase IO MakeIO)
@@ -97,13 +74,83 @@ ioRefMake opts = MonadMake.Dict
         either (undefined . singleError . f) return e
     }
 
-runIORefMake ::  Options ->
-                 (forall m. MonadMake m => m a) ->
-                  IO (Either MultipleErrors a, MultipleErrors)
+runIORefMake :: Options
+                -> (forall m. MonadMake m => m a)
+                -> IO (Either MultipleErrors a, MultipleErrors)
 runIORefMake opts m = do
-    ref <- newIORef opts
-    runLoggerT' $ runExceptT $ unMakeIO $ m (( ioRefMake ref ))
+    optsRef <- newIORef opts
+    errsRef <- newIORef mempty
+    res <- runExceptT $ unMakeIO $ m (( ioRefMake optsRef errsRef ))
+    errs <- readIORef errsRef
+    return (res, errs)
 
+ioRefReader :: IORef Options -> MonadReader.Dict Options MakeIO
+ioRefReader ref = MonadReader.Dict
+    { parent1 = getDict @(Monad MakeIO)
+    , ask = liftIO $ readIORef ref
+    , local = \f m -> do
+        r <- liftIO $ readIORef ref
+        liftIO $ writeIORef ref (f r)
+        res <- m
+        liftIO $ writeIORef ref r
+        return res
+    , reader = \f -> do
+        r <- liftIO $ readIORef ref
+        return $ f r
+    }
+
+ioRefErrorLogger :: IORef MultipleErrors -> MonadWriter.Dict MultipleErrors MakeIO
+ioRefErrorLogger ref = MonadWriter.Dict
+    { parent1 = getDict @(Monoid MultipleErrors)
+    , parent2 = getDict @(Monad MakeIO)
+    , writer = \(a, w) -> do
+        liftIO $ atomicModifyIORef' ref (\w' -> (mappend w' w, a))
+    , tell = \w -> liftIO $ atomicModifyIORef' ref (\w' -> (mappend w' w, ()))
+    , listen = \m -> do
+        w <- liftIO $ atomicModifyIORef' ref ((,) mempty) -- liftIO $ readIORef ref
+        a <- m
+        liftIO . atomicModifyIORef' ref $ \w' -> (mappend w w', (a, w'))
+    , pass = \m -> do
+        w <- liftIO $ atomicModifyIORef' ref ((,) mempty) -- liftIO $ readIORef ref
+        (a, f) <- m
+        liftIO . atomicModifyIORef' ref $ \w' -> (mappend w (f w'), a)
+    }
+
+-- | A monad for running make actions
+newtype Make a = Make
+  { unMake :: ExceptT MultipleErrors (ReaderT Options (Logger MultipleErrors)) a
+  } deriving (Functor, Applicative, Monad, MonadIO, MonadError MultipleErrors, MonadWriter MultipleErrors, MonadReader Options)
+
+instance MonadBase IO Make where
+  liftBase = liftIO
+
+instance MonadBaseControl IO Make where
+  type StM Make a = Either MultipleErrors a
+  liftBaseWith f = Make $ liftBaseWith $ \q -> f (q . unMake)
+  restoreM = Make . restoreM
+
+instance MonadMake Make where
+    makeIO = makeIO'
+
+-- | Execute a 'Make' monad, returning either errors, or the result of the compile plus any warnings.
+runMake :: Options
+           -> (forall make. MonadMake make => make a)
+           -> IO (Either MultipleErrors a, MultipleErrors)
+runMake = runIORefMake
+
+-- | Run an 'IO' action in the 'Make' monad, by specifying how IO errors should
+-- be rendered as 'ErrorMessage' values.
+makeIO' :: MonadMake make => (IOError -> ErrorMessage) -> IO a -> make a
+makeIO' f io = do
+  e <- liftIO $ tryIOError io
+  either (throwError . singleError . f) return e
+
+-- | Read a text file in the 'Make' monad, capturing any errors using the
+-- 'MonadError' instance.
+readTextFile :: MonadMake make => FilePath -> make B.ByteString
+readTextFile path = makeIO (const (ErrorMessage [] $ CannotReadFile path)) $ B.readFile path
+
+-- | Dictionary utilities
 class HasDict (c :: Constraint) where
     type Dict c :: *
     getDict :: c => Dict c
@@ -196,145 +243,3 @@ instance HasDict (MonadBaseControl b m) where
         , liftBaseWith = liftBaseWith
         , restoreM = restoreM
         }
-
-ioRefReader ref = MonadReader.Dict
-    { parent1 = getDict @(Monad MakeIO)
-    , ask = liftIO $ readIORef ref
-    , local = \f m -> do
-        r <- liftIO $ readIORef ref
-        liftIO $ writeIORef ref (f r)
-        res <- m
-        liftIO $ writeIORef ref r
-        return res
-    , reader = \f -> do
-        r <- liftIO $ readIORef ref
-        return $ f r
-    }
-
---runReaderIO :: (forall m. MonadReader r m => m a) -> r -> IO a
---runReaderIO m r = do
-    --ref <- newIORef r
-    --m (( ioRefReader ref ))
-
-{-
-ioRefWriter :: Monoid r => IORef r -> MonadWriter.Dict r IO
-ioRefWriter ref = MonadWriter.Dict
-    { parent1 = Monoid.Dict { parent1 = Semigroup.Dict { (<>) = (<>), sconcat = sconcat, stimes = stimes }, mempty = mempty, mappend = mappend, mconcat = mconcat }
-    , parent2 = getDict @(Monad IO)
-    , writer = \(a, w) -> do
-        writeIORef ref w
-        return a
-    , tell = \w -> modifyIORef' ref (flip mappend w)
-    , listen = undefined -- \m -> do
-        -- a@(_, w') <- m
-        -- w <- flip mappend w' <$> readIORef ref
-        -- writeIORef ref w
-        -- return (a, w)
-    , pass = undefined -- \m -> do
-        -- ((a, f), w) <- m
-        -- return (a, f w)
-    }
-
-runStateIO :: (forall m. MonadState state m => m a) -> state -> IO a
-
-ioRefWriter' :: Monoid w => IORef w -> MonadWriter.Dict w IO
-ioRefWriter' ref = MonadWriter.Dict
-    { parent1 = undefined :: Monoid.Dict a
-    , parent2 = getDict @(Monad IO)
-    , writer = undefined :: Monoid w => (a, w) -> IO a
-    , tell = undefined :: Monoid w => w -> IO ()
-    , listen = undefined :: Monoid w => IO a -> IO (a, w)
-    , pass = undefined :: Monoid w => m (a, w -> w) -> m a
-    }
-
-runWriterIO :: (Semigroup w, Monoid w) => (forall m. MonadWriter w m => m (a, w)) -> IO a
-runWriterIO m = do
-    ref <- newIORef mempty
-    m (( ioRefWriter' ref ))
-    -}
-
-    {-
-class ( Monad m
-      , MonadReader Options m
-      , MonadWriter MultipleErrors m
-      , MonadError MultipleErrors m
-      , MonadIO m
-      ) => MonadMake m where
-    makeIO :: (IOError -> ErrorMessage) -> IO a -> m a
-    readTextFile :: FilePath -> m B.ByteString
-    -}
-
-ioRefStringWriter :: IORef MultipleErrors -> MonadWriter.Dict MultipleErrors IO
-ioRefStringWriter ref = MonadWriter.Dict
-    { parent1 = getDict @(Monoid MultipleErrors)
-    , parent2 = getDict @(Monad IO)
-    , writer = undefined
-    , tell = \w -> atomicModifyIORef' ref (\w' -> (mappend w' w, ()))
-    , listen = undefined
-    , pass = undefined
-    }
-
---runIORefLogger :: (forall m. MonadErrorLogger m => m a) -> IO (a, MultipleErrors)
---runIORefLogger m = do
-    --r <- newIORef $ MultipleErrors []
-    --a <- m (( ioRefLogger r ))
-    --w <- readIORef r
-    --return (a, w)
-
-runWriterIO :: (forall m. MonadWriter MultipleErrors m => m (a, MultipleErrors)) -> IO (a, MultipleErrors)
-runWriterIO m = do
-    ref <- newIORef mempty
-    m (( ioRefStringWriter ref ))
-
-
--- | A monad for running make actions
-newtype Make a = Make
-  { unMake :: ExceptT MultipleErrors (ReaderT Options (Logger MultipleErrors)) a
-  } deriving (Functor, Applicative, Monad, MonadIO, MonadError MultipleErrors, MonadWriter MultipleErrors, MonadReader Options)
-
-instance MonadBase IO Make where
-  liftBase = liftIO
-
-instance MonadBaseControl IO Make where
-  type StM Make a = Either MultipleErrors a
-  liftBaseWith f = Make $ liftBaseWith $ \q -> f (q . unMake)
-  restoreM = Make . restoreM
-
-instance MonadMake Make where
-    makeIO = makeIO'
-
---instance MonadMakeBase m => MonadMake (ExceptT MultipleErrors (WriterT MultipleErrors m)) where
-    --makeIO f io = do
-        --e <- liftIO $ tryIOError io
-        --either (undefined . singleError . f) return e
-
--- | Execute a 'Make' monad, returning either errors, or the result of the compile plus any warnings.
--- runMake :: Options -> Make a -> IO (Either MultipleErrors a, MultipleErrors)
-runMake :: Options -> (forall make. MonadMake make => make a) -> IO (Either MultipleErrors a, MultipleErrors)
-runMake = runIORefMake
---runMake opts = runLogger' . flip runReaderT opts . runExceptT . unMake
-
-{-
-runMake :: MonadMake m => Options -> m a -> IO (Either MultipleErrors a, MultipleErrors)
-runMake opts m = do
-    ref <- newIORef opts
-    -- runWriterT . runExceptT . m (( ioRefMakeBase ref ))
-    m' (( ioRefMakeBase ref ))
-  where
-    m' :: MonadMakeBase m => m (Either MultipleErrors a, MultipleErrors)
-    m' = runWriterT . runExceptT $ Except m
-    -}
-
-    -- undefined -- m (( ioRefMakeBase ref ))
-
--- | Run an 'IO' action in the 'Make' monad, by specifying how IO errors should
--- be rendered as 'ErrorMessage' values.
-makeIO' :: MonadMake make => (IOError -> ErrorMessage) -> IO a -> make a
-makeIO' f io = do
-  e <- liftIO $ tryIOError io
-  either (throwError . singleError . f) return e
-
--- | Read a text file in the 'Make' monad, capturing any errors using the
--- 'MonadError' instance.
-readTextFile :: MonadMake make => FilePath -> make B.ByteString
-readTextFile path = makeIO (const (ErrorMessage [] $ CannotReadFile path)) $ B.readFile path
