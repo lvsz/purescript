@@ -9,12 +9,10 @@ module Control.Monad.Logger where
 
 import Prelude.Compat
 
-import Control.Monad (ap)
 import Control.Monad.Base (MonadBase(..))
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Writer.Class
-import Control.Monad.Identity
 
 import Data.IORef
 
