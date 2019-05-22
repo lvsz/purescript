@@ -1,0 +1,31 @@
+{
+  "name": "purescript-halogen-renderless",
+  "authors": [
+    "Thomas R. Honeyman <admin@thomashoneyman.com>"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/thomashoneyman/purescript-halogen-renderless",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.0.1",
+    "purescript-control": "^4.0.0",
+    "purescript-halogen": "^4.0.0"
+  },
+  "version": "0.0.3",
+  "_release": "0.0.3",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.0.3",
+    "commit": "8a2317f852cec273d6eeab2ab0b81b4343e6fc9a"
+  },
+  "_source": "https://github.com/thomashoneyman/purescript-halogen-renderless.git",
+  "_target": "^0.0.3",
+  "_originalSource": "purescript-halogen-renderless"
+}

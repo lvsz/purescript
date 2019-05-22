@@ -1,0 +1,34 @@
+{
+  "name": "purescript-semirings",
+  "homepage": "https://github.com/purescript/purescript-semirings",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/purescript/purescript-semirings.git"
+  },
+  "ignore": [
+    "**/.*",
+    "bower_components",
+    "node_modules",
+    "output",
+    "test",
+    "bower.json",
+    "package.json"
+  ],
+  "dependencies": {
+    "purescript-foldable-traversable": "^4.0.0",
+    "purescript-lists": "^5.0.0",
+    "purescript-newtype": "^3.0.0",
+    "purescript-prelude": "^4.0.0"
+  },
+  "version": "5.0.0",
+  "_release": "5.0.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v5.0.0",
+    "commit": "36aedc601d296607439eec1e71f8483adc373ffc"
+  },
+  "_source": "https://github.com/purescript/purescript-semirings.git",
+  "_target": "^5.0.0",
+  "_originalSource": "purescript-semirings"
+}

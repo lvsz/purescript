@@ -21,7 +21,6 @@ import qualified System.IO as IO
 import qualified Text.PrettyPrint.ANSI.Leijen as Doc
 import           Version (versionString)
 
-
 main :: IO ()
 main = do
     IO.hSetEncoding IO.stdout IO.utf8

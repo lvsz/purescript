@@ -1,0 +1,49 @@
+{
+  "name": "purescript-routing",
+  "homepage": "https://github.com/slamdata/purescript-routing",
+  "authors": [
+    "Maxim Zimaliev <zimaliev@yandex.ru>"
+  ],
+  "description": "purescript library for routing",
+  "keywords": [
+    "purescript",
+    "routing"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/slamdata/purescript-routing.git"
+  },
+  "ignore": [
+    "**/.*",
+    "bower_components",
+    "node_modules",
+    "output",
+    "test",
+    "bower.json",
+    "package.json"
+  ],
+  "dependencies": {
+    "purescript-web-html": "^1.0.0",
+    "purescript-effect": "^2.0.0",
+    "purescript-either": "^4.0.0",
+    "purescript-globals": "^4.0.0",
+    "purescript-lists": "^5.0.0",
+    "purescript-maybe": "^4.0.0",
+    "purescript-prelude": "^4.0.0",
+    "purescript-semirings": "^5.0.0",
+    "purescript-tuples": "^5.0.0",
+    "purescript-validation": "^4.0.0",
+    "purescript-aff": "^5.0.0",
+    "purescript-control": "^4.0.0",
+    "purescript-console": "^4.1.0",
+    "purescript-integers": "^4.0.0",
+    "purescript-foldable-traversable": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-console": "^4.1.0",
+    "purescript-assert": "^4.0.0",
+    "purescript-record": "^1.0.0",
+    "purescript-generics-rep": "^6.0.0"
+  }
+}

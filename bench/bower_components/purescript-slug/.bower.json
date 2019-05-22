@@ -1,0 +1,44 @@
+{
+  "name": "purescript-slug",
+  "license": "MIT",
+  "authors": [
+    "Thomas R. Honeyman <admin@thomashoneyman.com>"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomashoneyman/purescript-slug.git"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.1.0",
+    "purescript-maybe": "^4.0.0",
+    "purescript-strings": "^4.0.0",
+    "purescript-unicode": "^4.0.1",
+    "purescript-generics-rep": "^6.1.0",
+    "purescript-argonaut-codecs": "^5.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0",
+    "purescript-quickcheck": "^5.0.0",
+    "purescript-test-unit": "^14.0.0",
+    "purescript-debug": "^4.0.0"
+  },
+  "homepage": "https://github.com/thomashoneyman/purescript-slug",
+  "version": "0.2.0",
+  "_release": "0.2.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.2.0",
+    "commit": "33ff180b37843102666f72f7c468e92740c124a1"
+  },
+  "_source": "https://github.com/thomashoneyman/purescript-slug.git",
+  "_target": "^0.2.0",
+  "_originalSource": "purescript-slug"
+}

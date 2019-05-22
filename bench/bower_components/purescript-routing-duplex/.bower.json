@@ -1,0 +1,40 @@
+{
+  "name": "purescript-routing-duplex",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.1.0",
+    "purescript-record": "^1.0.0",
+    "purescript-generics-rep": "^6.0.0",
+    "purescript-either": "^4.0.0",
+    "purescript-control": "^4.1.0",
+    "purescript-typelevel-prelude": "^3.0.0",
+    "purescript-arrays": "^5.0.0",
+    "purescript-globals": "^4.0.0",
+    "purescript-strings": "^4.0.0",
+    "purescript-lazy": "^4.0.0",
+    "purescript-profunctor": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0",
+    "purescript-console": "^4.1.0",
+    "purescript-effect": "^2.0.0",
+    "purescript-assert": "^4.0.0",
+    "purescript-quickcheck": "^5.0.0"
+  },
+  "homepage": "https://github.com/natefaubion/purescript-routing-duplex",
+  "version": "0.2.0",
+  "_release": "0.2.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.2.0",
+    "commit": "949e3bc395566fb304e3c72eda9af3c920537925"
+  },
+  "_source": "https://github.com/natefaubion/purescript-routing-duplex.git",
+  "_target": "^0.2.0",
+  "_originalSource": "purescript-routing-duplex"
+}

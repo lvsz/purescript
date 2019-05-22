@@ -1,0 +1,50 @@
+{
+  "name": "purescript-profunctor-lenses",
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/purescript-contrib/purescript-profunctor-lenses.git"
+  },
+  "dependencies": {
+    "purescript-arrays": "^5.0.0",
+    "purescript-bifunctors": "^4.0.0",
+    "purescript-const": "^4.0.0",
+    "purescript-control": "^4.0.0",
+    "purescript-distributive": "^4.0.0",
+    "purescript-either": "^4.0.0",
+    "purescript-foldable-traversable": "^4.0.0",
+    "purescript-foreign-object": "^1.0.0",
+    "purescript-functors": "^3.0.0",
+    "purescript-identity": "^4.0.0",
+    "purescript-lists": "^5.0.0",
+    "purescript-maybe": "^4.0.0",
+    "purescript-newtype": "^3.0.0",
+    "purescript-ordered-collections": "^1.0.0",
+    "purescript-partial": "^2.0.0",
+    "purescript-prelude": "^4.0.0",
+    "purescript-profunctor": "^4.0.0",
+    "purescript-record": "^1.0.0",
+    "purescript-transformers": "^4.0.0",
+    "purescript-tuples": "^5.0.0"
+  },
+  "devDependencies": {
+    "purescript-console": "^4.0.0"
+  },
+  "homepage": "https://github.com/paf31/purescript-profunctor-lenses",
+  "version": "4.0.0",
+  "_release": "4.0.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v4.0.0",
+    "commit": "54138b076577c372c7613e9312208612469be993"
+  },
+  "_source": "https://github.com/paf31/purescript-profunctor-lenses.git",
+  "_target": "^4.0.0",
+  "_originalSource": "purescript-profunctor-lenses"
+}

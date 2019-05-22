@@ -1,0 +1,39 @@
+{
+  "name": "purescript-precise-datetime",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/awakesecurity/purescript-precise-datetime.git"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-arrays": "^5.0.0",
+    "purescript-console": "^4.1.0",
+    "purescript-datetime": "^4.0.0",
+    "purescript-either": "^4.0.0",
+    "purescript-enums": "^4.0.0",
+    "purescript-foldable-traversable": "^4.0.0",
+    "purescript-formatters": "^4.0.0",
+    "purescript-integers": "^4.0.0",
+    "purescript-js-date": "^6.0.0",
+    "purescript-lists": "^5.0.0",
+    "purescript-maybe": "^4.0.0",
+    "purescript-newtype": "^3.0.0",
+    "purescript-prelude": "^4.0.1",
+    "purescript-strings": "^4.0.0",
+    "purescript-tuples": "^5.0.0",
+    "purescript-unicode": "^4.0.0",
+    "purescript-numbers": "^6.0.0",
+    "purescript-decimals": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0",
+    "purescript-spec": "^3.0.0",
+    "purescript-spec-discovery": "owickstrom/purescript-spec-discovery#06d37dbdb2f456a95b68543cc8a0371dbebf87b5"
+  }
+}

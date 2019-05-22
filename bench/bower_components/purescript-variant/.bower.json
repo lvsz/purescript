@@ -1,0 +1,51 @@
+{
+  "name": "purescript-variant",
+  "homepage": "https://github.com/natefaubion/purescript-variant",
+  "authors": [
+    "Nathan Faubion <nathan@n-son.com>"
+  ],
+  "description": "Polymorphic variants for PureScript",
+  "license": "MIT",
+  "keywords": [
+    "purescript",
+    "polymorphic",
+    "variants"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/natefaubion/purescript-variant.git"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output",
+    "test"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.0.0",
+    "purescript-tuples": "^5.0.0",
+    "purescript-unsafe-coerce": "^4.0.0",
+    "purescript-partial": "^2.0.0",
+    "purescript-maybe": "^4.0.0",
+    "purescript-typelevel-prelude": "^3.0.0",
+    "purescript-lists": "^5.0.0",
+    "purescript-record": "^1.0.0",
+    "purescript-enums": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-console": "^4.0.0",
+    "purescript-assert": "^4.0.0",
+    "purescript-either": "^4.0.0"
+  },
+  "version": "5.2.0",
+  "_release": "5.2.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v5.2.0",
+    "commit": "be1de40cba7d7b832dbd26236a61215dfe9d20af"
+  },
+  "_source": "https://github.com/natefaubion/purescript-variant.git",
+  "_target": "^5.2.0",
+  "_originalSource": "purescript-variant"
+}

@@ -1,0 +1,38 @@
+{
+  "name": "purescript-decimals",
+  "description": "Arbitrary precision numbers",
+  "license": "MIT",
+  "homepage": "https://github.com/sharkdp/purescript-decimals",
+  "authors": [
+    "David Peter <mail@david-peter.de>"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/sharkdp/purescript-decimals.git"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-maybe": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0",
+    "purescript-assert": "^4.0.0",
+    "purescript-quickcheck": "^5.0.0",
+    "purescript-numbers": "^6.0.0"
+  },
+  "version": "4.0.0",
+  "_release": "4.0.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v4.0.0",
+    "commit": "94161bad1aa941e407995bb8144c046adaf14c00"
+  },
+  "_source": "https://github.com/sharkdp/purescript-decimals.git",
+  "_target": "^4.0.0",
+  "_originalSource": "purescript-decimals"
+}

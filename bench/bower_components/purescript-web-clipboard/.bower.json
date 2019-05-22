@@ -1,0 +1,30 @@
+{
+  "name": "purescript-web-clipboard",
+  "homepage": "https://github.com/purescript-web/purescript-web-clipboard",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/purescript-web/purescript-web-clipboard.git"
+  },
+  "ignore": [
+    "**/.*",
+    "bower_components",
+    "node_modules",
+    "output",
+    "bower.json",
+    "package.json"
+  ],
+  "dependencies": {
+    "purescript-web-html": "^1.0.0"
+  },
+  "version": "1.0.0",
+  "_release": "1.0.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v1.0.0",
+    "commit": "281d20ebee423d8e6e0295919ef882406523b95c"
+  },
+  "_source": "https://github.com/purescript-web/purescript-web-clipboard.git",
+  "_target": "^1.0.0",
+  "_originalSource": "purescript-web-clipboard"
+}

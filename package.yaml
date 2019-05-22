@@ -160,6 +160,41 @@ tests:
     default-extensions:
       - NoImplicitPrelude
 
+benchmarks:
+  benchmarks:
+    main: Main.hs
+    source-dirs: bench
+    ghc-options: -Wall -O2 -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
+    other-modules:
+      - Command.Bundle
+      - Command.Compile
+      - Command.Docs
+      - Command.Docs.Html
+      - Command.Hierarchy
+      - Command.Ide
+      - Command.Publish
+      - Command.REPL
+      - Paths_purescript
+      - Version
+    dependencies:
+      - ansi-wl-pprint
+      - file-embed
+      - http-types
+      - network
+      - optparse-applicative >=0.13.0
+      - purescript
+      - wai ==3.*
+      - wai-websockets ==3.*
+      - warp ==3.*
+      - websockets >=0.9 && <0.13
+    when:
+    - condition: flag(release)
+      then:
+        cpp-options: -DRELEASE
+      else:
+        dependencies:
+        - gitrev >=1.2.0 && <1.4
+
 flags:
   release:
     description: >

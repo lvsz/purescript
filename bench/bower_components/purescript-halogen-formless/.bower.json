@@ -1,0 +1,45 @@
+{
+  "name": "purescript-halogen-formless",
+  "authors": [
+    "Thomas R. Honeyman <admin@thomashoneyman.com>"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/thomashoneyman/purescript-halogen-formless",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomashoneyman/purescript-halogen-formless.git"
+  },
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "purescript-halogen": "^4.0.0",
+    "purescript-halogen-renderless": "^0.0.3",
+    "purescript-variant": "^5.0.0",
+    "purescript-heterogeneous": "^0.3.0",
+    "purescript-generics-rep": "^6.1.0"
+  },
+  "devDependencies": {
+    "purescript-halogen-storybook": "^0.4.0",
+    "purescript-debug": "^4.0.0",
+    "purescript-test-unit": "^14.0.0",
+    "purescript-read": "^1.0.1",
+    "purescript-halogen-select": "^2.0.0"
+  },
+  "version": "0.5.2",
+  "_release": "0.5.2",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.5.2",
+    "commit": "d2ea40347fbed51271301eabc23983417e2f3cc9"
+  },
+  "_source": "https://github.com/thomashoneyman/purescript-halogen-formless.git",
+  "_target": "^0.5.2",
+  "_originalSource": "purescript-halogen-formless"
+}

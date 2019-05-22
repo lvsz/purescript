@@ -1,0 +1,29 @@
+{
+    "name": "purescript-remotedata",
+    "version": "1.0.0",
+    "description": "Tools for fetching data from remote sources (incl. HTTP). Ported from the original Elm library.",
+    "main": "index.js",
+    "directories": {
+        "test": "test"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "bower": "^1.8.4",
+        "pulp": "^12.3.0",
+        "purescript": "^0.12.0"
+    },
+    "scripts": {
+        "postinstall": "bower cache clean && bower install",
+        "test": "pulp test"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/krisajenkins/purescript-remotedata.git"
+    },
+    "author": "Kris Jenkins",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/krisajenkins/purescript-remotedata/issues"
+    },
+    "homepage": "https://github.com/krisajenkins/purescript-remotedata#readme"
+}

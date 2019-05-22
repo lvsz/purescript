@@ -1,0 +1,29 @@
+{
+  "name": "purescript-heterogeneous",
+  "homepage": "https://github.com/natefaubion/purescript-heterogeneous",
+  "authors": [
+    "Nathan Faubion <nathan@n-son.com>"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/natefaubion/purescript-heterogeneous.git"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.1.0",
+    "purescript-record": "^1.0.0",
+    "purescript-tuples": "^5.0.0",
+    "purescript-functors": "^3.0.1",
+    "purescript-variant": "^5.1.0",
+    "purescript-either": "^4.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0"
+  }
+}
