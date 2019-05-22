@@ -69,7 +69,7 @@ ioRefMake opts errs = MonadMake.Dict
   , parent7 = getDict @(MonadBaseControl IO MakeIO)
   , makeIO = \f io -> do
       e <- liftIO $ tryIOError io
-      either (undefined . singleError . f) return e
+      either (throwError . singleError . f) return e
   }
 
 runIORefMake :: Options
